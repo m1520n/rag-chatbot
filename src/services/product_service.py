@@ -1,3 +1,4 @@
+from handlers.data_processor import clean_and_enhance_text, extract_product_type
 from src.handlers.mysql_handler import MySQLHandler
 from src.handlers.vector_handler import VectorHandler
 from src.handlers.embedding_handler import EmbeddingHandler
@@ -62,27 +63,44 @@ class ProductService:
         """Print debug information about the vector index."""
         self.vector_db.debug_index()
 
-    def preview_product_embedding(self, product_id=None):
-        """Preview how a product will be processed for embedding."""
-        if product_id:
-            product = self.mysql.get_product_by_id(product_id)
-            if not product:
-                return None
-            products = [product]
-        else:
-            products = self.mysql.fetch_active_products()
-
+    def preview_product_embedding(self, page=1, per_page=10):
+        """Preview how products will be processed for embedding with pagination.
+        
+        Args:
+            page (int): The page number (1-based)
+            per_page (int): Number of items per page
+        
+        Returns:
+            dict: Contains paginated preview data and pagination metadata
+        """
+        # Calculate offset
+        offset = (page - 1) * per_page
+        
+        # Get total count first
+        total_count = self.mysql.count_active_products()
+        
+        # Get paginated products
+        products = self.mysql.fetch_active_products_paginated(offset, per_page)
+        
         preview_data = []
         for product in products:
             name = product.get("name_en", "")
-            descr = " ".join([
+            tags = product.get("tags_en", "")
+            description = " ".join([
                 product.get("descr_en", ""),
                 product.get("descr2_en", "")
             ])
-            tags = product.get("tags_en", "")
+             # Clean and enhance text
+            name_clean = clean_and_enhance_text(name)
+            description_clean = clean_and_enhance_text(description)
+            tags_clean = clean_and_enhance_text(tags, is_tags=True)
+            
+            # Extract and add product type as additional context
+            product_type = extract_product_type(name_clean, tags_clean)
+            enhanced_name = f"{product_type} {name_clean}"
 
             # Get embedding data
-            embedding_data = self.embeddings.create_product_embedding(name, descr, tags)
+            embedding_data = self.embeddings.create_product_embedding(enhanced_name, description_clean, tags_clean, product_type)
             if not embedding_data:
                 continue
 
@@ -93,19 +111,35 @@ class ProductService:
                 'id': product['id'],
                 'original_data': {
                     'name': name,
-                    'description': descr,
+                    'description': description,
                     'tags': tags
                 },
                 'processed_data': {
-                    'name_clean': embedding_data['name_clean'],
-                    'product_type': embedding_data['product_type'],
-                    'tags_clean': embedding_data['tags_clean']
+                    'name_clean': name_clean,
+                    'product_type': product_type,
+                    'description_clean': description_clean,
+                    'tags_clean': tags_clean
                 },
-                'embedding_vector': embedding_data['embedding'][:5] + ['...'],  # Show only first 5 dimensions
+                'embedding_vector': embedding_data[:5] + ['...'],  # Show only first 5 dimensions
                 'is_indexed': vector_data is not None
             })
 
-        return preview_data
+        # Calculate pagination metadata
+        total_pages = (total_count + per_page - 1) // per_page
+        has_next = page < total_pages
+        has_prev = page > 1
+
+        return {
+            'items': preview_data,
+            'pagination': {
+                'page': page,
+                'per_page': per_page,
+                'total': total_count,
+                'total_pages': total_pages,
+                'has_next': has_next,
+                'has_prev': has_prev
+            }
+        }
 
 # Create a singleton instance
 product_service = ProductService() 

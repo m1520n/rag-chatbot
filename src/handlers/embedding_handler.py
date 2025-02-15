@@ -19,23 +19,14 @@ class EmbeddingHandler:
             print(f"❌ Error encoding query: {str(e)}")
             return None
 
-    def create_product_embedding(self, name, description, tags):
+    def create_product_embedding(self, name, description, tags, product):
         """Create a weighted embedding for a product."""
         try:
-            # Clean and enhance text
-            name_clean = clean_and_enhance_text(name)
-            descr_clean = clean_and_enhance_text(description)
-            tags_clean = clean_and_enhance_text(tags, is_tags=True)
-            
-            # Extract and add product type as additional context
-            product_type = extract_product_type(name_clean, tags_clean)
-            enhanced_name = f"{product_type} {name_clean}"
-            
             # Generate embeddings with enhanced text
-            embedding_name = self.model.encode(enhanced_name)
-            embedding_descr = self.model.encode(descr_clean)
-            embedding_tags = self.model.encode(tags_clean)
-            embedding_category = self.model.encode(product_type)
+            embedding_name = self.model.encode(name)
+            embedding_descr = self.model.encode(description)
+            embedding_tags = self.model.encode(tags)
+            embedding_category = self.model.encode(product)
 
             # Combine vectors with adjusted weights
             final_embedding = (
@@ -48,12 +39,7 @@ class EmbeddingHandler:
             # Normalize the final embedding
             final_embedding = final_embedding / np.linalg.norm(final_embedding)
             
-            return {
-                'embedding': final_embedding.tolist(),
-                'name_clean': name_clean,
-                'tags_clean': tags_clean,
-                'product_type': product_type
-            }
+            return final_embedding.tolist()
         except Exception as e:
             print(f"❌ Error creating product embedding: {str(e)}")
             return None

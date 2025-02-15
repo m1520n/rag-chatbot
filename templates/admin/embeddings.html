@@ -10,15 +10,36 @@
     <div class="container mx-auto px-4 py-8">
         <h1 class="text-3xl font-bold mb-8">Product Embeddings Preview</h1>
         
-        <!-- Loading State -->
-        <div id="loading-state" class="text-center py-12">
+        <!-- Initial Loading State -->
+        <div id="initial-loading" class="text-center py-12">
             <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
             <p class="text-gray-600">Loading product data...</p>
+        </div>
+
+        <!-- Error State -->
+        <div id="error-state" class="hidden text-center py-12">
+            <div class="text-red-500 mb-4">
+                <svg class="w-12 h-12 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                <p>Error loading data. <button onclick="loadProducts(1)" class="text-blue-500 underline">Try again</button></p>
+            </div>
         </div>
 
         <!-- Products Grid -->
         <div id="products-grid" class="grid gap-6 hidden">
             <!-- Products will be inserted here via JavaScript -->
+        </div>
+
+        <!-- Load More State -->
+        <div id="load-more" class="hidden text-center py-8">
+            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto"></div>
+            <p class="text-gray-600 mt-2">Loading more products...</p>
+        </div>
+
+        <!-- End of Results -->
+        <div id="end-of-results" class="hidden text-center py-8">
+            <p class="text-gray-600">No more products to load.</p>
         </div>
     </div>
 
@@ -69,17 +90,56 @@
     </template>
 
     <script>
-        document.addEventListener('DOMContentLoaded', async () => {
-            const loadingState = document.getElementById('loading-state');
-            const productsGrid = document.getElementById('products-grid');
-            const template = document.getElementById('product-card-template');
+        // State management
+        const state = {
+            currentPage: 1,
+            loading: false,
+            hasMore: true,
+            perPage: 10
+        };
+
+        // DOM Elements
+        const elements = {
+            initialLoading: document.getElementById('initial-loading'),
+            errorState: document.getElementById('error-state'),
+            productsGrid: document.getElementById('products-grid'),
+            loadMore: document.getElementById('load-more'),
+            endOfResults: document.getElementById('end-of-results'),
+            template: document.getElementById('product-card-template')
+        };
+
+        // Load products with pagination
+        async function loadProducts(page, append = false) {
+            if (state.loading || (!append && !state.hasMore)) return;
+            
+            state.loading = true;
+            state.currentPage = page;
+
+            // Show appropriate loading state
+            if (!append) {
+                elements.initialLoading.classList.remove('hidden');
+                elements.productsGrid.classList.add('hidden');
+                elements.errorState.classList.add('hidden');
+            } else {
+                elements.loadMore.classList.remove('hidden');
+            }
 
             try {
-                const response = await fetch('/admin/embeddings/data');
-                const products = await response.json();
+                const response = await fetch(`/admin/embeddings/data?page=${page}&per_page=${state.perPage}`);
+                const data = await response.json();
 
-                products.forEach(product => {
-                    const card = template.content.cloneNode(true);
+                if (!response.ok) throw new Error(data.error || 'Failed to load products');
+
+                // Update state
+                state.hasMore = data.pagination.has_next;
+
+                // Render products
+                if (!append) {
+                    elements.productsGrid.innerHTML = '';
+                }
+
+                data.items.forEach(product => {
+                    const card = elements.template.content.cloneNode(true);
                     
                     // Set all data fields
                     card.querySelector('[data-field="id"]').textContent = product.id;
@@ -92,27 +152,54 @@
                     
                     card.querySelector('[data-field="processed-name"]').textContent = product.processed_data.name_clean;
                     card.querySelector('[data-field="processed-type"]').textContent = product.processed_data.product_type;
+                    card.querySelector('[data-field="processed-description"]').textContent = product.processed_data.description_clean;
                     card.querySelector('[data-field="processed-tags"]').textContent = product.processed_data.tags_clean;
                     
                     card.querySelector('[data-field="embedding-vector"]').textContent = product.embedding_vector;
                     card.querySelector('[data-field="view-link"]').href = `/admin/embeddings/${product.id}`;
                     
-                    productsGrid.appendChild(card);
+                    elements.productsGrid.appendChild(card);
                 });
 
-                // Hide loading state and show products
-                loadingState.classList.add('hidden');
-                productsGrid.classList.remove('hidden');
+                // Show/hide appropriate elements
+                elements.initialLoading.classList.add('hidden');
+                elements.productsGrid.classList.remove('hidden');
+                elements.loadMore.classList.add('hidden');
+                
+                if (!state.hasMore) {
+                    elements.endOfResults.classList.remove('hidden');
+                } else {
+                    elements.endOfResults.classList.add('hidden');
+                }
             } catch (error) {
-                loadingState.innerHTML = `
-                    <div class="text-red-500 mb-4">
-                        <svg class="w-12 h-12 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                        </svg>
-                        <p>Error loading data. Please try refreshing the page.</p>
-                    </div>
-                `;
+                console.error('Error loading products:', error);
+                if (!append) {
+                    elements.errorState.classList.remove('hidden');
+                    elements.initialLoading.classList.add('hidden');
+                    elements.productsGrid.classList.add('hidden');
+                }
+            } finally {
+                state.loading = false;
             }
+        }
+
+        // Infinite scroll handler
+        function handleScroll() {
+            if (!state.hasMore || state.loading) return;
+
+            const scrolledToBottom = 
+                window.innerHeight + window.scrollY >= 
+                document.documentElement.scrollHeight - 1000; // Load more when 1000px from bottom
+
+            if (scrolledToBottom) {
+                loadProducts(state.currentPage + 1, true);
+            }
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadProducts(1);
+            window.addEventListener('scroll', handleScroll);
         });
     </script>
 </body>

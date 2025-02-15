@@ -35,7 +35,7 @@ class MySQLHandler:
         """Fetch all active products from the database."""
         query = """
             SELECT id, name_en, descr_en, descr2_en, tags_en
-            FROM products WHERE active = 1
+            FROM products WHERE active = '1'
         """
         products = self._execute_query(query)
         print(f"🔍 Found {len(products)} active products")
@@ -45,7 +45,7 @@ class MySQLHandler:
         """Fetch a single product by ID."""
         query = """
             SELECT id, name_en, descr_en, descr2_en, tags_en
-            FROM products WHERE id = %s AND active = 1
+            FROM products WHERE id = %s AND active = '1'
         """
         results = self._execute_query(query, (product_id,))
         return results[0] if results else None
@@ -58,6 +58,23 @@ class MySQLHandler:
             WHERE id = %s
         """
         return self._execute_query(query, (metadata, product_id), fetch=False)
+
+    def count_active_products(self):
+        """Count total number of active products."""
+        query = "SELECT COUNT(*) as count FROM products WHERE active = '1'"
+        result = self._execute_query(query)
+        return result[0]['count'] if result else 0
+
+    def fetch_active_products_paginated(self, offset, limit):
+        """Fetch active products with pagination."""
+        query = """
+            SELECT id, name_en, descr_en, descr2_en, tags_en
+            FROM products 
+            WHERE active != 0 OR active != NULL
+            ORDER BY id DESC
+            LIMIT %s OFFSET %s
+        """
+        return self._execute_query(query, (limit, offset))
 
 # Create a singleton instance
 mysql_db = MySQLHandler() 

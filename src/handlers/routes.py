@@ -54,8 +54,14 @@ def list_embeddings():
 
 @admin.route('/admin/embeddings/data')
 def get_embeddings_data():
-    """Return embedding preview data as JSON."""
-    preview_data = product_service.preview_product_embedding()
+    """Return embedding preview data as JSON with pagination."""
+    try:
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', 10))
+    except ValueError:
+        return jsonify({'error': 'Invalid pagination parameters'}), 400
+
+    preview_data = product_service.preview_product_embedding(page=page, per_page=per_page)
     return jsonify(preview_data)
 
 @admin.route('/admin/embeddings/<int:product_id>')
