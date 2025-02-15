@@ -22,7 +22,8 @@ class VectorHandler:
                     "name": embedding_result['name_clean'],
                     "url": url,
                     "tags": embedding_result['tags_clean'],
-                    "product_type": embedding_result['product_type']
+                    "product_type": embedding_result['product_type'],
+                    "description": embedding_result['description']
                 }]
             )
             return url

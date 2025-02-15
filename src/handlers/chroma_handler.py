@@ -19,7 +19,8 @@ class ChromaHandler:
                 "name": embedding_result['name_clean'],
                 "url": url,
                 "tags": embedding_result['tags_clean'],
-                "product_type": embedding_result['product_type']
+                "product_type": embedding_result['product_type'],
+                "description": embedding_result['description']
             }]
         )
         return url
@@ -49,12 +50,14 @@ class ChromaHandler:
             if score > threshold:
                 continue
 
+            print(f"Product: {results['metadatas'][0][i]}")
             name = results["metadatas"][0][i]["name"]
+            description = results["metadatas"][0][i]["description"]
             product_id = results['ids'][0][i]
             url_name = clean_url_string(name)
             url = f"{Config.BASE_URL}/{url_name}-{product_id}"
             
-            products.append(f"- **{name}** [View Product]({url})")
+            products.append(f"- **{name}** [View Product]({url}) {description}")
 
         return products
 

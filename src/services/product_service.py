@@ -172,7 +172,8 @@ class ProductService:
                 'embedding': embedding_result,
                 'name_clean': name_clean,
                 'tags_clean': tags_clean,
-                'product_type': product_type
+                'product_type': product_type,
+                'description': description_clean
             } if embedding_result else None
         else:
             embedding_data = None
