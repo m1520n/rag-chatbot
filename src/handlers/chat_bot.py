@@ -7,6 +7,10 @@ from src.handlers.db_handler import db
 from src.handlers.embedding_handler import embeddings
 import json
 
+#todo add translation from and to english from any language
+
+#todo add compression of context to the llm 
+
 logging.basicConfig(
     filename='chat_bot.log',
     level=logging.INFO,
