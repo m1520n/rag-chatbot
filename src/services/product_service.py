@@ -18,7 +18,8 @@ class ProductService:
             'total_products': 0,
             'processed_products': 0,
             'last_indexed': None,
-            'error': None
+            'error': None,
+            'errors': []  # List to store individual product errors
         }
 
     def get_indexing_status(self):
@@ -54,8 +55,13 @@ class ProductService:
                 'status': 'in_progress',
                 'progress': 0,
                 'current_product': None,
-                'error': None
+                'error': None,
+                'errors': []
             })
+
+            # Clean up existing index
+            if not self.vector_db.cleanup_index():
+                raise Exception("Failed to clean up existing index")
 
             # Get all products
             products = self.mysql.fetch_active_products()
@@ -75,7 +81,9 @@ class ProductService:
                     self._index_single_product(product)
 
                 except Exception as e:
-                    print(f"Error indexing product {product['id']}: {str(e)}")
+                    error_msg = f"Error indexing product {product['id']}: {str(e)}"
+                    print(error_msg)
+                    self._indexing_status['errors'].append(error_msg)
                     # Continue with next product
 
             # Update final status
@@ -84,13 +92,15 @@ class ProductService:
                 'status': 'completed',
                 'progress': 100,
                 'current_product': None,
-                'last_indexed': datetime.now().isoformat()
+                'last_indexed': datetime.now().isoformat(),
+                'error': None if not self._indexing_status['errors'] else f"Completed with {len(self._indexing_status['errors'])} errors"
             })
 
         except Exception as e:
             self._indexing_status.update({
                 'status': 'error',
-                'error': str(e)
+                'error': str(e),
+                'progress': 0
             })
 
     def index_all_products(self):
@@ -105,22 +115,80 @@ class ProductService:
 
         print("✅ Products indexed successfully!")
 
-    def _index_single_product(self, product):
-        """Index a single product into the vector database."""
-        # Get fields
+    def _prepare_product_data(self, product, create_embedding=True):
+        """Prepare product data for embedding.
+        
+        Args:
+            product (dict): Raw product data from MySQL
+            create_embedding (bool): Whether to create embedding vector
+            
+        Returns:
+            tuple: (original_data, processed_data, embedding_data)
+            where:
+                original_data (dict): Original product fields
+                processed_data (dict): Cleaned and processed text
+                embedding_data (dict): Data ready for vector database (if create_embedding=True)
+        """
+        # Extract original fields
         name = product.get("name_en", "")
-        descr = " ".join([
+        description = " ".join([
             product.get("descr_en", ""),
             product.get("descr2_en", "")
         ])
         tags = product.get("tags_en", "")
+        
+        # Clean and process text
+        name_clean = clean_and_enhance_text(name)
+        description_clean = clean_and_enhance_text(description)
+        tags_clean = clean_and_enhance_text(tags, is_tags=True)
+        
+        # Extract product type
+        product_type = extract_product_type(name_clean, tags_clean)
+        
+        original_data = {
+            'name': name,
+            'description': description,
+            'tags': tags
+        }
+        
+        processed_data = {
+            'name_clean': name_clean,
+            'product_type': product_type,
+            'description_clean': description_clean,
+            'tags_clean': tags_clean
+        }
+        
+        if create_embedding:
+            enhanced_name = f"{product_type} {name_clean}"
+            # Create embedding
+            embedding_result = self.embeddings.create_product_embedding(
+                enhanced_name, 
+                description_clean, 
+                tags_clean, 
+                product_type
+            )
+            
+            embedding_data = {
+                'embedding': embedding_result,
+                'name_clean': name_clean,
+                'tags_clean': tags_clean,
+                'product_type': product_type
+            } if embedding_result else None
+        else:
+            embedding_data = None
+        
+        return original_data, processed_data, embedding_data
 
-        # Create embedding and get metadata
-        result = self.embeddings.create_product_embedding(name, descr, tags)
+    def _index_single_product(self, product):
+        """Index a single product into the vector database."""
+        original_data, processed_data, embedding_data = self._prepare_product_data(product, create_embedding=True)
+        
+        if not embedding_data:
+            raise Exception("Failed to create embedding for product")
         
         product_id = str(product['id'])
-        url = self.vector_db.add_product(product_id, result)
-        print(f"📝 Indexing: {result['name_clean']} (Type: {result['product_type']})")
+        url = self.vector_db.add_product(product_id, embedding_data)
+        print(f"📝 Indexing: {processed_data['name_clean']} (Type: {processed_data['product_type']})")
 
     def search_products(self, query, conversation_history=[]):
         """Search for products using semantic search."""
@@ -145,16 +213,7 @@ class ProductService:
         self.vector_db.debug_index()
 
     def preview_product_embedding(self, page=1, per_page=10, filters=None):
-        """Preview how products will be processed for embedding with pagination.
-        
-        Args:
-            page (int): The page number (1-based)
-            per_page (int): Number of items per page
-            filters (dict): Dictionary of filters, e.g. {'empty_fields': ['description', 'tags']}
-        
-        Returns:
-            dict: Contains paginated preview data and pagination metadata
-        """
+        """Preview how products will be processed for embedding with pagination."""
         # Calculate offset
         offset = (page - 1) * per_page
         
@@ -166,44 +225,18 @@ class ProductService:
         
         preview_data = []
         for product in products:
-            name = product.get("name_en", "")
-            tags = product.get("tags_en", "")
-            description = " ".join([
-                product.get("descr_en", ""),
-                product.get("descr2_en", "")
-            ])
-            # Clean and enhance text
-            name_clean = clean_and_enhance_text(name)
-            description_clean = clean_and_enhance_text(description)
-            tags_clean = clean_and_enhance_text(tags, is_tags=True)
+            # Get clean data without creating embeddings
+            original_data, processed_data, _ = self._prepare_product_data(product, create_embedding=False)
             
-            # Extract and add product type as additional context
-            product_type = extract_product_type(name_clean, tags_clean)
-            enhanced_name = f"{product_type} {name_clean}"
-
-            # # Get embedding data
-            # embedding_data = self.embeddings.create_product_embedding(enhanced_name, description_clean, tags_clean, product_type)
-            # if not embedding_data:
-            #     continue
-
-            # # Get vector data if product is already indexed
-            # vector_data = self.vector_db.get_product(str(product['id']))
+            # Get vector data if product is already indexed
+            vector_data = self.vector_db.get_product(str(product['id']))
             
             preview_data.append({
                 'id': product['id'],
-                'original_data': {
-                    'name': name,
-                    'description': description,
-                    'tags': tags
-                },
-                'processed_data': {
-                    'name_clean': name_clean,
-                    'product_type': product_type,
-                    'description_clean': description_clean,
-                    'tags_clean': tags_clean
-                },
-                'embedding_vector': [], # embedding_data[:5] + ['...'],  # Show only first 5 dimensions
-                'is_indexed': False # vector_data is not None
+                'original_data': original_data,
+                'processed_data': processed_data,
+                'embedding_vector': vector_data['embedding'][:5] + ['...'] if vector_data else [],
+                'is_indexed': vector_data is not None
             })
 
         # Calculate pagination metadata
@@ -224,58 +257,36 @@ class ProductService:
         }
 
     def preview_single_product_embedding(self, product_id):
-        """Preview embedding for a single product.
-        
-        Args:
-            product_id (int): The ID of the product to preview
-        
-        Returns:
-            dict: Product preview data or None if not found
-        """
+        """Preview embedding for a single product."""
         product = self.mysql.get_product_by_id(product_id)
         if not product:
             return None
             
-        name = product.get("name_en", "")
-        tags = product.get("tags_en", "")
-        description = " ".join([
-            product.get("descr_en", ""),
-            product.get("descr2_en", "")
-        ])
-        
-        # Clean and enhance text
-        name_clean = clean_and_enhance_text(name)
-        description_clean = clean_and_enhance_text(description)
-        tags_clean = clean_and_enhance_text(tags, is_tags=True)
-        
-        # Extract and add product type as additional context
-        product_type = extract_product_type(name_clean, tags_clean)
-        enhanced_name = f"{product_type} {name_clean}"
-
-        # Get embedding data
-        embedding_data = self.embeddings.create_product_embedding(enhanced_name, description_clean, tags_clean, product_type)
-        if not embedding_data:
-            return None
+        # Get clean data without creating embeddings
+        original_data, processed_data, _ = self._prepare_product_data(product, create_embedding=False)
 
         # Get vector data if product is already indexed
         vector_data = self.vector_db.get_product(str(product_id))
         
         return {
             'id': product_id,
-            'original_data': {
-                'name': name,
-                'description': description,
-                'tags': tags
-            },
-            'processed_data': {
-                'name_clean': name_clean,
-                'product_type': product_type,
-                'description_clean': description_clean,
-                'tags_clean': tags_clean
-            },
-            'embedding_vector': embedding_data[:5] + ['...'],  # Show only first 5 dimensions
+            'original_data': original_data,
+            'processed_data': processed_data,
+            'embedding_vector': vector_data['embedding'][:5] + ['...'] if vector_data else [],
             'is_indexed': vector_data is not None
         }
+
+    def cleanup_index(self):
+        """Clean up the vector database."""
+        return self.vector_db.cleanup_index()
+
+    def remove_product(self, product_id):
+        """Remove a product from the vector database."""
+        return self.vector_db.remove_product(product_id)
+
+    def remove_products(self, product_ids):
+        """Remove multiple products from the vector database."""
+        return self.vector_db.remove_products(product_ids)
 
 # Create a singleton instance
 product_service = ProductService() 

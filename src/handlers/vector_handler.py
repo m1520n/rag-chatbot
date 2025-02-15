@@ -101,4 +101,38 @@ class VectorHandler:
             return len(self.collection.get()['ids'])
         except Exception as e:
             print(f"❌ Error counting indexed products: {str(e)}")
-            return 0 
+            return 0
+
+    def cleanup_index(self):
+        """Remove all entries from the vector database."""
+        try:
+            # Delete the entire collection
+            self.client.delete_collection(Config.CHROMA_COLLECTION_NAME)
+            
+            # Recreate the collection
+            self.collection = self.client.create_collection(Config.CHROMA_COLLECTION_NAME)
+            print("✅ Vector database cleaned up successfully")
+            return True
+        except Exception as e:
+            print(f"❌ Error cleaning up vector database: {str(e)}")
+            return False
+
+    def remove_product(self, product_id):
+        """Remove a single product from the vector database."""
+        try:
+            self.collection.delete(ids=[str(product_id)])
+            print(f"✅ Product {product_id} removed from vector database")
+            return True
+        except Exception as e:
+            print(f"❌ Error removing product {product_id}: {str(e)}")
+            return False
+
+    def remove_products(self, product_ids):
+        """Remove multiple products from the vector database."""
+        try:
+            self.collection.delete(ids=[str(pid) for pid in product_ids])
+            print(f"✅ {len(product_ids)} products removed from vector database")
+            return True
+        except Exception as e:
+            print(f"❌ Error removing products: {str(e)}")
+            return False 

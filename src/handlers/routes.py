@@ -61,8 +61,11 @@ def indexing_page():
 @admin.route('/admin/indexing/status')
 def get_indexing_status():
     """Get current indexing status."""
-    status = product_service.get_indexing_status()
-    return jsonify(status)
+    try:
+        status = product_service.get_indexing_status()
+        return jsonify(status)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @admin.route('/admin/indexing/start', methods=['POST'])
 def start_indexing():
@@ -76,8 +79,21 @@ def start_indexing():
 @admin.route('/admin/indexing/progress')
 def get_indexing_progress():
     """Get current indexing progress."""
-    progress = product_service.get_indexing_progress()
-    return jsonify(progress)
+    try:
+        progress = product_service.get_indexing_progress()
+        return jsonify(progress)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@admin.route('/admin/indexing/cleanup', methods=['POST'])
+def cleanup_index():
+    """Clean up the vector database."""
+    try:
+        if product_service.cleanup_index():
+            return jsonify({'status': 'success'})
+        return jsonify({'error': 'Failed to clean up index'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @admin.route('/admin/embeddings')
 def list_embeddings():
