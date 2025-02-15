@@ -288,5 +288,32 @@ class ProductService:
         """Remove multiple products from the vector database."""
         return self.vector_db.remove_products(product_ids)
 
+    def get_embeddings_for_visualization(self):
+        """Get all embeddings with metadata for visualization.
+        
+        Returns:
+            tuple: (embeddings, metadata, ids) where:
+                embeddings: list of embedding vectors
+                metadata: list of metadata dicts
+                ids: list of product ids
+        """
+        try:
+            # Get all data from ChromaDB
+            results = self.vector_db.collection.get(
+                include=['embeddings', 'metadatas', 'ids']
+            )
+            
+            if not results['ids']:
+                return [], [], []
+                
+            return (
+                results['embeddings'],
+                results['metadatas'],
+                results['ids']
+            )
+        except Exception as e:
+            print(f"❌ Error getting embeddings for visualization: {str(e)}")
+            return [], [], []
+
 # Create a singleton instance
 product_service = ProductService() 

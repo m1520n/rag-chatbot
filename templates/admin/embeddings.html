@@ -211,14 +211,14 @@
                 card.querySelector('[data-field="index-status"]').textContent = product.is_indexed ? 'Indexed' : 'Not Indexed';
                 card.querySelector('[data-field="index-status"]').className = `px-3 py-1 rounded-full text-sm ${product.is_indexed ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`;
                 
-                card.querySelector('[data-field="original-name"]').textContent = product.original_data.name;
-                card.querySelector('[data-field="original-description"]').textContent = product.original_data.description;
-                card.querySelector('[data-field="original-tags"]').textContent = product.original_data.tags;
+                card.querySelector('[data-field="original-name"]').textContent = product?.original_data?.name;
+                card.querySelector('[data-field="original-description"]').textContent = product?.original_data?.description;
+                card.querySelector('[data-field="original-tags"]').textContent = product?.original_data?.tags;
                 
-                card.querySelector('[data-field="processed-name"]').textContent = product.processed_data.name_clean;
-                card.querySelector('[data-field="processed-type"]').textContent = product.processed_data.product_type;
-                card.querySelector('[data-field="processed-description"]').textContent = product.processed_data.description_clean;
-                card.querySelector('[data-field="processed-tags"]').textContent = product.processed_data.tags_clean;
+                card.querySelector('[data-field="processed-name"]').textContent = product?.processed_data?.name_clean;
+                card.querySelector('[data-field="processed-type"]').textContent = product?.processed_data?.product_type;
+                card.querySelector('[data-field="processed-description"]').textContent = product?.processed_data?.description_clean;
+                card.querySelector('[data-field="processed-tags"]').textContent = product?.processed_data?.tags_clean;
                 
                 card.querySelector('[data-field="embedding-vector"]').textContent = product.embedding_vector;
                 card.querySelector('[data-field="view-link"]').href = `/admin/embeddings/${product.id}`;

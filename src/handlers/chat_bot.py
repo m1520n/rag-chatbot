@@ -8,6 +8,49 @@ def clean_response(text):
     """Remove <think> sections and unwanted formatting from model responses."""
     return re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL).strip()
 
+def extract_query_components_llm(query):
+    """Use the model to extract product category and attributes."""
+    
+    prompt = f"""
+    Extract key information from the following user query. Identify:
+    1. The product category (e.g., 'garage door', 'window')
+    2. Relevant attributes (e.g., 'color', 'size', 'insulation')
+    3. Any additional requirements (e.g., 'passive house compatible')
+
+    Example query: "I'm looking for garage doors for my passive house. What are the available colors?"
+    
+    Expected JSON output:
+    {{
+      "product": "garage doors",
+      "attributes": ["color"],
+      "special_requirements": ["passive house compatible"]
+    }}
+
+    Now analyze the following query:
+    {query}
+    """
+
+    response = ollama.chat(
+        model=Config.OLLAMA_MODEL, 
+        messages=[{"role": "user", "content": prompt}]
+    )
+
+    #extract the json from the response
+    # we need to only extract the json from the response
+    # the response is a string and we need to extract the json from the string
+    # the json is between ```json and ```
+    # so we need to extract the json from the string
+
+    # extract the json from the response
+    import json
+    json_response = re.search(r'```json(.*?)```', response['message']['content'], re.DOTALL)
+    if json_response:
+        extracted_data = json.loads(json_response.group(1))
+    else:
+        extracted_data = {"product": None, "attributes": [], "special_requirements": []}
+
+    return extracted_data
+
 def get_context_from_history(history):
     """Extract relevant context from conversation history."""
     context = []
@@ -76,24 +119,37 @@ def generate_response(query, products, conversation_history=[]):
     return clean_response(response['message']['content'])
 
 def chat_with_bot(query, conversation_history=[]):
-    """Handle chatbot conversation logic with context."""
+    """Handles chatbot conversation logic with improved query understanding."""
     
-    # Encode query and search for products
-    query_vector = embeddings.encode_query(query)
-    products = db.search_products(query_vector, conversation_history)
+    extracted_info = extract_query_components_llm(query)
+    product = extracted_info["product"]
+    attributes = extracted_info["attributes"]
+    special_requirements = extracted_info["special_requirements"]
 
-    if not products:
-        return "I apologize, but I couldn't find any matching products in our current catalog. Could you please provide more details about what you're looking for? For example, are you interested in specific types of windows or doors?"
-    
-    # Add debug information
-    print(f"🔍 Found {len(products)} relevant products")
-    for product in products:
-        print(f"  {product}")
-    
-    response = generate_response(query, "\n".join(products), conversation_history)
-    
-    # Verify response contains product links when products are mentioned
-    if any(name in response for name in [p.split('**')[1].strip() for p in products]) and not '[View Product]' in response:
-        response += "\n\nHere are the direct links to the products mentioned:\n" + "\n".join(products)
-    
+    if not product:
+        return "I couldn't determine the product you're looking for. Could you clarify?"
+
+    # Step 1: Search for the main product category (e.g., "garage doors")
+    product_vector = embeddings.encode_query(product)
+    product_results = db.search_products(product_vector, conversation_history)
+
+    if not product_results:
+        return f"Sorry, I couldn't find any {product} in our catalog."
+
+    # Step 2: Search for attributes within the found products
+    attribute_results = []
+    for attr in attributes:
+        attr_vector = embeddings.encode_query(attr)
+        attr_matches = db.search_products(attr_vector, conversation_history)
+        
+        # Filter attributes to match found product category
+        filtered_attrs = [a for a in attr_matches if product in a.lower()]
+        attribute_results.extend(filtered_attrs)
+
+    # Merge product and attribute results
+    combined_results = list(set(product_results + attribute_results))
+
+    # Step 3: Generate chatbot response
+    response = generate_response(query, "\n".join(combined_results), conversation_history)
+
     return response

@@ -129,4 +129,19 @@ def show_embedding(product_id):
     preview_data = product_service.preview_single_product_embedding(product_id)
     if not preview_data:
         return jsonify({'error': 'Product not found'}), 404
-    return jsonify(preview_data) 
+    return jsonify(preview_data)
+
+@admin.route('/admin/embeddings/visualize')
+def visualize_embeddings():
+    """Display vector embeddings visualization."""
+    return render_template('admin/visualize.html')
+
+@admin.route('/admin/embeddings/data/vectors')
+def get_vectors_data():
+    """Return vector data for visualization."""
+    embeddings, metadatas, ids = product_service.get_embeddings_for_visualization()
+    return jsonify({
+        'embeddings': embeddings,
+        'metadatas': metadatas,
+        'ids': ids
+    }) 

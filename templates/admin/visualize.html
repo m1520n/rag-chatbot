@@ -1,0 +1,277 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Vector Embeddings Visualization{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="flex justify-between items-center mb-8">
+        <h1 class="text-3xl font-bold">Vector Embeddings Visualization</h1>
+        <div class="space-x-4">
+            <select id="visualization-type" class="px-4 py-2 border rounded">
+                <option value="tsne">t-SNE</option>
+                <option value="umap">UMAP</option>
+            </select>
+            <button onclick="updateVisualization()" 
+                    class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors">
+                Update View
+            </button>
+        </div>
+    </div>
+
+    <!-- Loading State -->
+    <div id="loading" class="hidden text-center py-12">
+        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+        <p class="text-gray-600">Processing embeddings...</p>
+    </div>
+
+    <!-- Error State -->
+    <div id="error" class="hidden bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative">
+        <strong class="font-bold">Error!</strong>
+        <span id="error-message" class="block sm:inline"></span>
+    </div>
+
+    <!-- Visualization Container -->
+    <div id="visualization" class="bg-white rounded-lg shadow-md p-6">
+        <div id="plot" style="height: 600px;"></div>
+    </div>
+
+    <!-- Product Details -->
+    <div id="product-details" class="mt-8 bg-white rounded-lg shadow-md p-6 hidden">
+        <h2 class="text-xl font-semibold mb-4">Selected Product Details</h2>
+        <div class="grid md:grid-cols-2 gap-6">
+            <div class="space-y-2">
+                <p><span class="font-medium">Name:</span> <span id="details-name"></span></p>
+                <p><span class="font-medium">Type:</span> <span id="details-type"></span></p>
+                <p><span class="font-medium">Tags:</span> <span id="details-tags"></span></p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+<script>
+    // Elements
+    const elements = {
+        loading: document.getElementById('loading'),
+        error: document.getElementById('error'),
+        errorMessage: document.getElementById('error-message'),
+        plot: document.getElementById('plot'),
+        productDetails: document.getElementById('product-details'),
+        detailsName: document.getElementById('details-name'),
+        detailsType: document.getElementById('details-type'),
+        detailsTags: document.getElementById('details-tags'),
+        visualizationType: document.getElementById('visualization-type')
+    };
+
+    // State
+    let currentData = null;
+
+    // Load data and create visualization
+    async function loadData() {
+        elements.loading.classList.remove('hidden');
+        elements.error.classList.add('hidden');
+        
+        try {
+            const response = await fetch('/admin/embeddings/data/vectors');
+            const data = await response.json();
+            
+            if (!response.ok) throw new Error(data.error || 'Failed to load data');
+            if (!data.embeddings.length) throw new Error('No embeddings found');
+            
+            currentData = data;
+            await updateVisualization();
+            
+        } catch (error) {
+            console.error('Error loading data:', error);
+            elements.error.classList.remove('hidden');
+            elements.errorMessage.textContent = error.message;
+        } finally {
+            elements.loading.classList.add('hidden');
+        }
+    }
+
+    // Update visualization based on selected method
+    async function updateVisualization() {
+        if (!currentData) return;
+        
+        elements.loading.classList.remove('hidden');
+        elements.error.classList.add('hidden');
+        
+        try {
+            const method = elements.visualizationType.value;
+            const vectors = currentData.embeddings;
+            
+            // Convert to tensor
+            const tensorData = tf.tensor2d(vectors);
+            
+            // Reduce dimensions using selected method
+            let reducedData;
+            if (method === 'tsne') {
+                reducedData = await reduceDimensionsTSNE(tensorData);
+            } else {
+                reducedData = await reduceDimensionsUMAP(tensorData);
+            }
+            
+            // Create scatter plot
+            const trace = {
+                x: reducedData.map(d => d[0]),
+                y: reducedData.map(d => d[1]),
+                mode: 'markers',
+                type: 'scatter',
+                text: currentData.metadatas.map(m => m.name),
+                marker: {
+                    size: 8,
+                    color: currentData.metadatas.map(m => getColorForType(m.product_type)),
+                    opacity: 0.7
+                },
+                hovertemplate: 
+                    '<b>%{text}</b><br>' +
+                    'Type: %{customdata[0]}<br>' +
+                    '<extra></extra>',
+                customdata: currentData.metadatas.map(m => [m.product_type])
+            };
+
+            const layout = {
+                title: `Product Embeddings Visualization (${method.toUpperCase()})`,
+                showlegend: false,
+                hovermode: 'closest',
+                margin: { t: 50, l: 50, r: 50, b: 50 }
+            };
+
+            Plotly.newPlot('plot', [trace], layout);
+            
+            // Add click handler
+            elements.plot.on('plotly_click', (data) => {
+                const point = data.points[0];
+                const metadata = currentData.metadatas[point.pointIndex];
+                
+                elements.detailsName.textContent = metadata.name;
+                elements.detailsType.textContent = metadata.product_type;
+                elements.detailsTags.textContent = metadata.tags;
+                elements.productDetails.classList.remove('hidden');
+            });
+            
+        } catch (error) {
+            console.error('Error updating visualization:', error);
+            elements.error.classList.remove('hidden');
+            elements.errorMessage.textContent = error.message;
+        } finally {
+            elements.loading.classList.add('hidden');
+        }
+    }
+
+    // Reduce dimensions using t-SNE
+    async function reduceDimensionsTSNE(tensor) {
+        // Simple t-SNE implementation using TensorFlow.js
+        const perplexity = 30;
+        const iterations = 1000;
+        
+        // Normalize data
+        const normalized = tf.sub(tensor, tf.mean(tensor, 0));
+        const std = tf.sqrt(tf.mean(tf.square(normalized), 0));
+        const standardized = tf.div(normalized, std);
+        
+        // Calculate pairwise distances
+        const squaredDists = tf.matMul(standardized, standardized.transpose())
+            .mul(2)
+            .sub(tf.sum(tf.square(standardized), 1).expandDims(1))
+            .sub(tf.sum(tf.square(standardized), 1).expandDims(0));
+        
+        // Convert to probabilities
+        const probs = tf.exp(tf.div(squaredDists, -2 * Math.pow(perplexity, 2)));
+        const probsNormalized = tf.div(probs, tf.sum(probs, 1).expandDims(1));
+        
+        // Initialize low-dimensional representation
+        const reduced = tf.randomNormal([tensor.shape[0], 2]);
+        
+        // Gradient descent
+        for (let i = 0; i < iterations; i++) {
+            // Calculate low-dimensional probabilities
+            const reducedSquaredDists = tf.matMul(reduced, reduced.transpose())
+                .mul(2)
+                .sub(tf.sum(tf.square(reduced), 1).expandDims(1))
+                .sub(tf.sum(tf.square(reduced), 1).expandDims(0));
+            
+            const reducedProbs = tf.exp(reducedSquaredDists.neg());
+            const reducedProbsNormalized = tf.div(reducedProbs, tf.sum(reducedProbs, 1).expandDims(1));
+            
+            // Calculate gradients
+            const gradients = tf.mul(
+                tf.sub(probsNormalized, reducedProbsNormalized),
+                reducedSquaredDists
+            );
+            
+            // Update reduced representation
+            const update = tf.mul(gradients, 0.1);
+            reduced.add(update);
+        }
+        
+        return reduced.arraySync();
+    }
+
+    // Reduce dimensions using UMAP
+    async function reduceDimensionsUMAP(tensor) {
+        // Simple UMAP implementation using TensorFlow.js
+        // Note: This is a very simplified version of UMAP
+        const neighbors = 15;
+        const iterations = 1000;
+        
+        // Normalize data
+        const normalized = tf.sub(tensor, tf.mean(tensor, 0));
+        const std = tf.sqrt(tf.mean(tf.square(normalized), 0));
+        const standardized = tf.div(normalized, std);
+        
+        // Calculate nearest neighbors
+        const squaredDists = tf.matMul(standardized, standardized.transpose())
+            .mul(2)
+            .sub(tf.sum(tf.square(standardized), 1).expandDims(1))
+            .sub(tf.sum(tf.square(standardized), 1).expandDims(0));
+        
+        // Convert to probabilities
+        const probs = tf.exp(squaredDists.neg());
+        const probsNormalized = tf.div(probs, tf.sum(probs, 1).expandDims(1));
+        
+        // Initialize low-dimensional representation
+        const reduced = tf.randomNormal([tensor.shape[0], 2]);
+        
+        // Gradient descent
+        for (let i = 0; i < iterations; i++) {
+            // Calculate low-dimensional distances
+            const reducedSquaredDists = tf.matMul(reduced, reduced.transpose())
+                .mul(2)
+                .sub(tf.sum(tf.square(reduced), 1).expandDims(1))
+                .sub(tf.sum(tf.square(reduced), 1).expandDims(0));
+            
+            // Calculate gradients
+            const gradients = tf.mul(
+                tf.sub(probsNormalized, tf.exp(reducedSquaredDists.neg())),
+                reducedSquaredDists
+            );
+            
+            // Update reduced representation
+            const update = tf.mul(gradients, 0.1);
+            reduced.add(update);
+        }
+        
+        return reduced.arraySync();
+    }
+
+    // Get color for product type
+    function getColorForType(type) {
+        const colors = {
+            'garage': '#FF6B6B',
+            'window': '#4ECDC4',
+            'door': '#45B7D1',
+            'gate': '#96CEB4',
+            'other': '#CCCCCC'
+        };
+        return colors[type] || colors.other;
+    }
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', loadData);
+</script>
+{% endblock %} 
