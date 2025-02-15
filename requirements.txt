@@ -1,0 +1,7 @@
+flask==3.0.2
+mysql-connector-python==8.3.0
+chromadb==0.4.24
+sentence-transformers==2.5.1
+beautifulsoup4==4.12.3
+ollama==0.1.6
+python-dotenv==1.0.1 

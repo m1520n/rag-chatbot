@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat with AI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        body {
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+        .main-container {
+            height: 100vh;
+            padding: 1rem;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        .chat-wrapper {
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+        }
+        .chat-container {
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            max-width: 600px;
+        }
+        .message {
+            max-width: 85%;
+            margin: 10px;
+            padding: 10px 15px;
+            border-radius: 15px;
+            word-wrap: break-word;
+            position: relative;
+            overflow-wrap: break-word;
+            word-break: break-word;
+        }
+        .message-time {
+            font-size: 0.75rem;
+            color: #666;
+            margin-top: 4px;
+        }
+        .user-message {
+            background-color: #e3f2fd;
+            margin-left: auto;
+        }
+        .bot-message {
+            background-color: #f5f5f5;
+            margin-right: auto;
+        }
+        .message-container {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            max-width: 100%;
+            overflow-y: auto;
+            padding: 20px;
+        }
+        .typing-indicator {
+            display: none;
+            padding: 10px;
+            background-color: #f5f5f5;
+            border-radius: 15px;
+            margin: 10px;
+            width: fit-content;
+        }
+        .dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            margin-right: 3px;
+            background-color: #90a4ae;
+            border-radius: 50%;
+            animation: wave 1.3s linear infinite;
+        }
+        .dot:nth-child(2) { animation-delay: -1.1s; }
+        .dot:nth-child(3) { animation-delay: -0.9s; }
+
+        @keyframes wave {
+            0%, 60%, 100% { transform: translateY(0); }
+            30% { transform: translateY(-4px); }
+        }
+
+        /* Message content styling */
+        .message-content {
+            line-height: 1.5;
+            overflow-wrap: break-word;
+            word-wrap: break-word;
+            word-break: break-word;
+            hyphens: auto;
+        }
+        .message-content a {
+            color: #2563eb;
+            text-decoration: none;
+            word-break: break-all;
+        }
+        .message-content a:hover {
+            text-decoration: underline;
+        }
+        .message-content strong {
+            font-weight: 600;
+        }
+        .message-content p {
+            margin: 0.5em 0;
+            max-width: 100%;
+        }
+        .message-content p:first-child {
+            margin-top: 0;
+        }
+        .message-content p:last-child {
+            margin-bottom: 0;
+        }
+        
+        .input-container {
+            padding: 1rem;
+            border-top: 1px solid #e5e7eb;
+            background: white;
+        }
+        
+        /* Container responsiveness */
+        @media (max-width: 640px) {
+            .message {
+                max-width: 90%;
+            }
+            .main-container {
+                padding: 0;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div class="main-container">
+        <div class="chat-wrapper">
+            <div class="bg-white rounded-lg shadow-lg h-full flex flex-col">
+                <div class="p-4 border-b">
+                    <h1 class="text-2xl font-bold text-gray-800">Chat with AI Assistant</h1>
+                </div>
+                
+                <div class="chat-container">
+                    <div id="chat-messages" class="message-container">
+                        <div class="bot-message message">
+                            <div class="message-content">Hello! I'm your AI assistant. How can I help you today?</div>
+                            <div class="message-time"></div>
+                        </div>
+                        <div class="typing-indicator">
+                            <span class="dot"></span>
+                            <span class="dot"></span>
+                            <span class="dot"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="input-container">
+                    <form id="chat-form" class="flex gap-4">
+                        <input type="text" 
+                               id="user-input" 
+                               class="flex-1 p-2 border rounded-lg focus:outline-none focus:border-blue-500"
+                               placeholder="Type your message here..."
+                               autocomplete="off">
+                        <button type="submit" 
+                                class="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none">
+                            Send
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const chatMessages = document.getElementById('chat-messages');
+        const chatForm = document.getElementById('chat-form');
+        const userInput = document.getElementById('user-input');
+        const typingIndicator = document.querySelector('.typing-indicator');
+
+        // Configure marked for safe HTML
+        marked.setOptions({
+            breaks: true,
+            sanitize: false
+        });
+
+        // Load chat history from localStorage
+        function loadChatHistory() {
+            const history = localStorage.getItem('chatHistory');
+            if (history) {
+                const messages = JSON.parse(history);
+                // Clear default welcome message
+                chatMessages.innerHTML = '';
+                // Add typing indicator back
+                chatMessages.appendChild(typingIndicator);
+                // Restore messages
+                messages.forEach(msg => {
+                    addMessage(msg.content, msg.isUser, msg.timestamp, false);
+                });
+            }
+        }
+
+        // Save chat history to localStorage
+        function saveChatHistory() {
+            const messages = [];
+            document.querySelectorAll('.message').forEach(messageDiv => {
+                if (!messageDiv.classList.contains('typing-indicator')) {
+                    messages.push({
+                        content: messageDiv.querySelector('.message-content').innerHTML,
+                        isUser: messageDiv.classList.contains('user-message'),
+                        timestamp: messageDiv.querySelector('.message-time').textContent
+                    });
+                }
+            });
+            localStorage.setItem('chatHistory', JSON.stringify(messages));
+        }
+
+        function formatDate(date) {
+            return new Intl.DateTimeFormat('en-US', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+            }).format(date);
+        }
+
+        function scrollToBottom() {
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function showTypingIndicator() {
+            typingIndicator.style.display = 'block';
+            scrollToBottom();
+        }
+
+        function hideTypingIndicator() {
+            typingIndicator.style.display = 'none';
+        }
+
+        function addMessage(content, isUser = false, timestamp = null, shouldSave = true) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${isUser ? 'user-message' : 'bot-message'}`;
+            
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            if (isUser) {
+                contentDiv.textContent = content;
+            } else {
+                contentDiv.innerHTML = marked.parse(content);
+            }
+            messageDiv.appendChild(contentDiv);
+            
+            const timeDiv = document.createElement('div');
+            timeDiv.className = 'message-time';
+            timeDiv.textContent = timestamp || formatDate(new Date());
+            messageDiv.appendChild(timeDiv);
+            
+            chatMessages.insertBefore(messageDiv, typingIndicator);
+            scrollToBottom();
+
+            if (shouldSave) {
+                saveChatHistory();
+            }
+        }
+
+        chatForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const message = userInput.value.trim();
+            if (!message) return;
+
+            // Add user message
+            addMessage(message, true);
+            userInput.value = '';
+
+            // Show typing indicator
+            showTypingIndicator();
+
+            try {
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ message }),
+                });
+
+                const data = await response.json();
+                
+                // Hide typing indicator and add bot response
+                hideTypingIndicator();
+                addMessage(data.response);
+            } catch (error) {
+                console.error('Error:', error);
+                hideTypingIndicator();
+                addMessage('Sorry, there was an error processing your request.');
+            }
+        });
+
+        // Enable sending message with Enter key
+        userInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                chatForm.dispatchEvent(new Event('submit'));
+            }
+        });
+
+        // Add clear chat button
+        const headerDiv = document.querySelector('.p-4.border-b');
+        const clearButton = document.createElement('button');
+        clearButton.className = 'px-4 py-1 text-sm text-red-600 hover:text-red-800 focus:outline-none float-right';
+        clearButton.textContent = 'Clear Chat';
+        clearButton.onclick = () => {
+            localStorage.removeItem('chatHistory');
+            chatMessages.innerHTML = '';
+            // Add back the welcome message
+            addMessage("Hello! I'm your AI assistant. How can I help you today?", false);
+            // Add back the typing indicator
+            chatMessages.appendChild(typingIndicator);
+        };
+        headerDiv.appendChild(clearButton);
+
+        // Load chat history on page load
+        loadChatHistory();
+
+        // Initial scroll to bottom
+        scrollToBottom();
+    </script>
+</body>
+</html> 

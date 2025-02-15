@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Product Embeddings Preview</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-3xl font-bold mb-8">Product Embeddings Preview</h1>
+        
+        <!-- Loading State -->
+        <div id="loading-state" class="text-center py-12">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+            <p class="text-gray-600">Loading product data...</p>
+        </div>
+
+        <!-- Products Grid -->
+        <div id="products-grid" class="grid gap-6 hidden">
+            <!-- Products will be inserted here via JavaScript -->
+        </div>
+    </div>
+
+    <!-- Product Card Template -->
+    <template id="product-card-template">
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <div class="flex justify-between items-start mb-4">
+                <h2 class="text-xl font-semibold">Product ID: <span data-field="id"></span></h2>
+                <span class="px-3 py-1 rounded-full text-sm" data-field="index-status"></span>
+            </div>
+
+            <div class="grid md:grid-cols-2 gap-6">
+                <div class="space-y-4">
+                    <h3 class="text-lg font-semibold text-gray-700">Original Data</h3>
+                    <div class="space-y-2">
+                        <p><span class="font-medium">Name:</span> <span data-field="original-name"></span></p>
+                        <p><span class="font-medium">Description:</span> <span data-field="original-description"></span></p>
+                        <p><span class="font-medium">Tags:</span> <span data-field="original-tags"></span></p>
+                    </div>
+                </div>
+
+                <div class="space-y-4">
+                    <h3 class="text-lg font-semibold text-gray-700">Processed Data</h3>
+                    <div class="space-y-2">
+                        <p><span class="font-medium">Name:</span> <span data-field="processed-name"></span></p>
+                        <p><span class="font-medium">Product Type:</span> <span data-field="processed-type"></span></p>
+                        <p><span class="font-medium">Description:</span> <span data-field="processed-description"></span></p>
+                        <p><span class="font-medium">Tags:</span> <span data-field="processed-tags"></span></p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-6">
+                <h3 class="text-lg font-semibold text-gray-700 mb-2">Embedding Vector Preview</h3>
+                <div class="bg-gray-50 p-4 rounded-lg overflow-x-auto">
+                    <code class="text-sm text-gray-600" data-field="embedding-vector"></code>
+                </div>
+            </div>
+
+            <div class="mt-6 flex justify-end">
+                <a href="#" data-field="view-link" 
+                   class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+                   target="_blank">
+                    View Full Data
+                </a>
+            </div>
+        </div>
+    </template>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            const loadingState = document.getElementById('loading-state');
+            const productsGrid = document.getElementById('products-grid');
+            const template = document.getElementById('product-card-template');
+
+            try {
+                const response = await fetch('/admin/embeddings/data');
+                const products = await response.json();
+
+                products.forEach(product => {
+                    const card = template.content.cloneNode(true);
+                    
+                    // Set all data fields
+                    card.querySelector('[data-field="id"]').textContent = product.id;
+                    card.querySelector('[data-field="index-status"]').textContent = product.is_indexed ? 'Indexed' : 'Not Indexed';
+                    card.querySelector('[data-field="index-status"]').className = `px-3 py-1 rounded-full text-sm ${product.is_indexed ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`;
+                    
+                    card.querySelector('[data-field="original-name"]').textContent = product.original_data.name;
+                    card.querySelector('[data-field="original-description"]').textContent = product.original_data.description;
+                    card.querySelector('[data-field="original-tags"]').textContent = product.original_data.tags;
+                    
+                    card.querySelector('[data-field="processed-name"]').textContent = product.processed_data.name_clean;
+                    card.querySelector('[data-field="processed-type"]').textContent = product.processed_data.product_type;
+                    card.querySelector('[data-field="processed-tags"]').textContent = product.processed_data.tags_clean;
+                    
+                    card.querySelector('[data-field="embedding-vector"]').textContent = product.embedding_vector;
+                    card.querySelector('[data-field="view-link"]').href = `/admin/embeddings/${product.id}`;
+                    
+                    productsGrid.appendChild(card);
+                });
+
+                // Hide loading state and show products
+                loadingState.classList.add('hidden');
+                productsGrid.classList.remove('hidden');
+            } catch (error) {
+                loadingState.innerHTML = `
+                    <div class="text-red-500 mb-4">
+                        <svg class="w-12 h-12 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <p>Error loading data. Please try refreshing the page.</p>
+                    </div>
+                `;
+            }
+        });
+    </script>
+</body>
+</html> 
