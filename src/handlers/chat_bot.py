@@ -127,14 +127,32 @@ def chat_with_bot(query, conversation_history=[]):
     special_requirements = extracted_info["special_requirements"]
 
     if not product:
-        return "I couldn't determine the product you're looking for. Could you clarify?"
+        return {
+            "response": "I couldn't determine the product you're looking for. Could you clarify?",
+            "debug_info": {
+                "extracted_info": extracted_info,
+                "query": query,
+                "products_found": [],
+                "prompt": None,
+                "attributes_found": []
+            }
+        }
 
     # Step 1: Search for the main product category (e.g., "garage doors")
     product_vector = embeddings.encode_query(product)
     product_results = db.search_products(product_vector, conversation_history)
 
     if not product_results:
-        return f"Sorry, I couldn't find any {product} in our catalog."
+        return {
+            "response": f"Sorry, I couldn't find any {product} in our catalog.",
+            "debug_info": {
+                "extracted_info": extracted_info,
+                "query": query,
+                "products_found": [],
+                "prompt": None,
+                "attributes_found": []
+            }
+        }
 
     # Step 2: Search for attributes within the found products
     attribute_results = []
@@ -149,7 +167,50 @@ def chat_with_bot(query, conversation_history=[]):
     # Merge product and attribute results
     combined_results = list(set(product_results + attribute_results))
 
+    # Generate the prompt for debugging purposes
+    history_info = get_context_from_history(conversation_history)
+    context = history_info['context']
+    last_query = history_info['last_query']
+    
+    is_followup = False
+    if last_query:
+        followup_indicators = ['it', 'this', 'that', 'these', 'those', 'they', 'them', 'the product']
+        is_followup = any(indicator in query.lower() for indicator in followup_indicators)
+    
+    debug_prompt = f"""You are a professional seller specializing in windows and doors at Aikon Distribution.
+    
+    RULES:
+    1. ONLY talk about products that are explicitly provided in the product list below
+    2. If a product is not in the list, say you don't have information about it
+    3. NEVER make up or invent product features, specifications, or details
+    4. When mentioning products, use EXACTLY the same names and links as provided
+    5. If asked about a product's details, ONLY discuss it if it's in the current product list
+    6. If you don't have enough information, ask the customer for clarification
+    7. ALWAYS include the exact product links when mentioning specific products
+    8. If the user asks about a new product, focus on that product even if different from previous ones
+    9. Only reference previous products if the user specifically asks about them
+
+    Previous context:
+    {context}
+    
+    {"Previous question: " + last_query if is_followup else ""}
+    
+    Available products for this conversation:
+    {combined_results}
+
+    Current question: "{query}"
+    """
+
     # Step 3: Generate chatbot response
     response = generate_response(query, "\n".join(combined_results), conversation_history)
 
-    return response
+    return {
+        "response": response,
+        "debug_info": {
+            "extracted_info": extracted_info,
+            "query": query,
+            "products_found": combined_results,
+            "prompt": debug_prompt,
+            "attributes_found": attribute_results
+        }
+    }

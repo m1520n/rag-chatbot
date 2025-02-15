@@ -26,7 +26,9 @@ def handle_chat():
     conversation_history = session.get('conversation_history', [])
     
     # Call chat_with_bot with conversation history
-    response = chat_with_bot(message, conversation_history)
+    result = chat_with_bot(message, conversation_history)
+    response = result["response"]
+    debug_info = result["debug_info"]
     
     # Update conversation history
     conversation_history.append({
@@ -45,7 +47,10 @@ def handle_chat():
     # Save updated history back to session
     session['conversation_history'] = conversation_history
     
-    return jsonify({'response': response})
+    return jsonify({
+        'response': response,
+        'debug_info': debug_info
+    })
 
 @admin.route('/')
 @admin.route('/dashboard')

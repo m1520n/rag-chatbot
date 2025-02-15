@@ -136,9 +136,89 @@
                 padding: 0;
             }
         }
+        
+        .debug-sidebar {
+            position: fixed;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            width: 400px;
+            background: white;
+            box-shadow: -2px 0 5px rgba(0,0,0,0.1);
+            transform: translateX(100%);
+            transition: transform 0.3s ease;
+            z-index: 1000;
+            overflow-y: auto;
+        }
+        
+        .debug-sidebar.open {
+            transform: translateX(0);
+        }
+        
+        .debug-toggle {
+            position: fixed;
+            right: 20px;
+            top: 20px;
+            z-index: 1001;
+            padding: 8px 16px;
+            background: #2563eb;
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        .debug-section {
+            border-bottom: 1px solid #e5e7eb;
+            padding: 1rem;
+        }
+        
+        .debug-section h3 {
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: #374151;
+        }
+        
+        .debug-content {
+            font-family: monospace;
+            font-size: 0.875rem;
+            white-space: pre-wrap;
+            word-break: break-word;
+            background: #f3f4f6;
+            padding: 0.5rem;
+            border-radius: 4px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
     </style>
 </head>
 <body class="bg-gray-100">
+    <button class="debug-toggle" onclick="toggleDebug()">Debug Info</button>
+    <div class="debug-sidebar">
+        <div class="p-4 border-b bg-gray-50">
+            <h2 class="text-xl font-bold text-gray-800">Debug Information</h2>
+        </div>
+        <div class="debug-section">
+            <h3>Extracted Information</h3>
+            <div id="debug-extracted" class="debug-content"></div>
+        </div>
+        <div class="debug-section">
+            <h3>Query</h3>
+            <div id="debug-query" class="debug-content"></div>
+        </div>
+        <div class="debug-section">
+            <h3>Products Found</h3>
+            <div id="debug-products" class="debug-content"></div>
+        </div>
+        <div class="debug-section">
+            <h3>Attributes Found</h3>
+            <div id="debug-attributes" class="debug-content"></div>
+        </div>
+        <div class="debug-section">
+            <h3>Generated Prompt</h3>
+            <div id="debug-prompt" class="debug-content"></div>
+        </div>
+    </div>
+    
     <div class="main-container">
         <div class="chat-wrapper">
             <div class="bg-white rounded-lg shadow-lg h-full flex flex-col">
@@ -267,36 +347,58 @@
             }
         }
 
+        function toggleDebug() {
+            const sidebar = document.querySelector('.debug-sidebar');
+            sidebar.classList.toggle('open');
+        }
+        
+        function updateDebugInfo(debugInfo) {
+            document.getElementById('debug-extracted').textContent = 
+                JSON.stringify(debugInfo.extracted_info, null, 2);
+            document.getElementById('debug-query').textContent = 
+                debugInfo.query;
+            document.getElementById('debug-products').textContent = 
+                debugInfo.products_found.join('\n');
+            document.getElementById('debug-attributes').textContent = 
+                debugInfo.attributes_found.join('\n');
+            document.getElementById('debug-prompt').textContent = 
+                debugInfo.prompt;
+        }
+
         chatForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const message = userInput.value.trim();
             if (!message) return;
-
-            // Add user message
+            
             addMessage(message, true);
             userInput.value = '';
-
-            // Show typing indicator
             showTypingIndicator();
-
+            
             try {
                 const response = await fetch('/chat', {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json',
+                        'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ message }),
+                    body: JSON.stringify({ message })
                 });
-
-                const data = await response.json();
                 
-                // Hide typing indicator and add bot response
+                const data = await response.json();
                 hideTypingIndicator();
-                addMessage(data.response);
+                
+                if (data.error) {
+                    addMessage(`Error: ${data.error}`, false);
+                } else {
+                    addMessage(data.response, false);
+                    updateDebugInfo(data.debug_info);
+                }
+                
+                saveChatHistory();
+                scrollToBottom();
             } catch (error) {
-                console.error('Error:', error);
                 hideTypingIndicator();
-                addMessage('Sorry, there was an error processing your request.');
+                addMessage('Sorry, there was an error processing your message.', false);
+                console.error('Error:', error);
             }
         });
 
