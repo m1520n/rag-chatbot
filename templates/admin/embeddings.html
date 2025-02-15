@@ -1,206 +1,270 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Product Embeddings Preview</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-gray-100">
-    <div class="container mx-auto px-4 py-8">
-        <h1 class="text-3xl font-bold mb-8">Product Embeddings Preview</h1>
+{% extends "admin/base.html" %}
+
+{% block title %}Product Embeddings Preview{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="flex justify-between items-center mb-8">
+        <h1 class="text-3xl font-bold">Product Embeddings Preview</h1>
         
-        <!-- Initial Loading State -->
-        <div id="initial-loading" class="text-center py-12">
-            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-            <p class="text-gray-600">Loading product data...</p>
-        </div>
-
-        <!-- Error State -->
-        <div id="error-state" class="hidden text-center py-12">
-            <div class="text-red-500 mb-4">
-                <svg class="w-12 h-12 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                </svg>
-                <p>Error loading data. <button onclick="loadProducts(1)" class="text-blue-500 underline">Try again</button></p>
+        <!-- Filter Controls -->
+        <div class="flex items-center space-x-4">
+            <div class="text-gray-700 font-medium">Show products with empty:</div>
+            <div class="flex space-x-2">
+                <label class="inline-flex items-center">
+                    <input type="checkbox" class="form-checkbox h-5 w-5 text-blue-600 filter-checkbox" value="name">
+                    <span class="ml-2">Name</span>
+                </label>
+                <label class="inline-flex items-center">
+                    <input type="checkbox" class="form-checkbox h-5 w-5 text-blue-600 filter-checkbox" value="description">
+                    <span class="ml-2">Description</span>
+                </label>
+                <label class="inline-flex items-center">
+                    <input type="checkbox" class="form-checkbox h-5 w-5 text-blue-600 filter-checkbox" value="tags">
+                    <span class="ml-2">Tags</span>
+                </label>
             </div>
+            <button onclick="applyFilters()" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors">
+                Apply Filters
+            </button>
         </div>
+    </div>
+    
+    <!-- Initial Loading State -->
+    <div id="initial-loading" class="text-center py-12">
+        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+        <p class="text-gray-600">Loading product data...</p>
+    </div>
 
-        <!-- Products Grid -->
-        <div id="products-grid" class="grid gap-6 hidden">
-            <!-- Products will be inserted here via JavaScript -->
-        </div>
-
-        <!-- Load More State -->
-        <div id="load-more" class="hidden text-center py-8">
-            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto"></div>
-            <p class="text-gray-600 mt-2">Loading more products...</p>
-        </div>
-
-        <!-- End of Results -->
-        <div id="end-of-results" class="hidden text-center py-8">
-            <p class="text-gray-600">No more products to load.</p>
+    <!-- Error State -->
+    <div id="error-state" class="hidden text-center py-12">
+        <div class="text-red-500 mb-4">
+            <svg class="w-12 h-12 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            <p>Error loading data. <button onclick="loadProducts(1)" class="text-blue-500 underline">Try again</button></p>
         </div>
     </div>
 
-    <!-- Product Card Template -->
-    <template id="product-card-template">
-        <div class="bg-white rounded-lg shadow-md p-6">
-            <div class="flex justify-between items-start mb-4">
-                <h2 class="text-xl font-semibold">Product ID: <span data-field="id"></span></h2>
-                <span class="px-3 py-1 rounded-full text-sm" data-field="index-status"></span>
+    <!-- Products Grid -->
+    <div id="products-grid" class="grid gap-6 hidden">
+        <!-- Products will be inserted here via JavaScript -->
+    </div>
+
+    <!-- Load More State -->
+    <div id="load-more" class="hidden text-center py-8">
+        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto"></div>
+        <p class="text-gray-600 mt-2">Loading more products...</p>
+    </div>
+
+    <!-- End of Results -->
+    <div id="end-of-results" class="hidden text-center py-8">
+        <p class="text-gray-600">No more products to load.</p>
+    </div>
+
+    <!-- No Results State -->
+    <div id="no-results" class="hidden text-center py-12">
+        <p class="text-gray-600">No products found matching the selected filters.</p>
+    </div>
+</div>
+
+<!-- Product Card Template -->
+<template id="product-card-template">
+    <div class="bg-white rounded-lg shadow-md p-6">
+        <div class="flex justify-between items-start mb-4">
+            <h2 class="text-xl font-semibold">Product ID: <span data-field="id"></span></h2>
+            <span class="px-3 py-1 rounded-full text-sm" data-field="index-status"></span>
+        </div>
+
+        <div class="grid md:grid-cols-2 gap-6">
+            <div class="space-y-4">
+                <h3 class="text-lg font-semibold text-gray-700">Original Data</h3>
+                <div class="space-y-2">
+                    <p><span class="font-medium">Name:</span> <span data-field="original-name"></span></p>
+                    <p><span class="font-medium">Description:</span> <span data-field="original-description"></span></p>
+                    <p><span class="font-medium">Tags:</span> <span data-field="original-tags"></span></p>
+                </div>
             </div>
 
-            <div class="grid md:grid-cols-2 gap-6">
-                <div class="space-y-4">
-                    <h3 class="text-lg font-semibold text-gray-700">Original Data</h3>
-                    <div class="space-y-2">
-                        <p><span class="font-medium">Name:</span> <span data-field="original-name"></span></p>
-                        <p><span class="font-medium">Description:</span> <span data-field="original-description"></span></p>
-                        <p><span class="font-medium">Tags:</span> <span data-field="original-tags"></span></p>
-                    </div>
+            <div class="space-y-4">
+                <h3 class="text-lg font-semibold text-gray-700">Processed Data</h3>
+                <div class="space-y-2">
+                    <p><span class="font-medium">Name:</span> <span data-field="processed-name"></span></p>
+                    <p><span class="font-medium">Product Type:</span> <span data-field="processed-type"></span></p>
+                    <p><span class="font-medium">Description:</span> <span data-field="processed-description"></span></p>
+                    <p><span class="font-medium">Tags:</span> <span data-field="processed-tags"></span></p>
                 </div>
-
-                <div class="space-y-4">
-                    <h3 class="text-lg font-semibold text-gray-700">Processed Data</h3>
-                    <div class="space-y-2">
-                        <p><span class="font-medium">Name:</span> <span data-field="processed-name"></span></p>
-                        <p><span class="font-medium">Product Type:</span> <span data-field="processed-type"></span></p>
-                        <p><span class="font-medium">Description:</span> <span data-field="processed-description"></span></p>
-                        <p><span class="font-medium">Tags:</span> <span data-field="processed-tags"></span></p>
-                    </div>
-                </div>
-            </div>
-
-            <div class="mt-6">
-                <h3 class="text-lg font-semibold text-gray-700 mb-2">Embedding Vector Preview</h3>
-                <div class="bg-gray-50 p-4 rounded-lg overflow-x-auto">
-                    <code class="text-sm text-gray-600" data-field="embedding-vector"></code>
-                </div>
-            </div>
-
-            <div class="mt-6 flex justify-end">
-                <a href="#" data-field="view-link" 
-                   class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
-                   target="_blank">
-                    View Full Data
-                </a>
             </div>
         </div>
-    </template>
 
-    <script>
-        // State management
-        const state = {
-            currentPage: 1,
-            loading: false,
-            hasMore: true,
-            perPage: 10
-        };
+        <div class="mt-6">
+            <h3 class="text-lg font-semibold text-gray-700 mb-2">Embedding Vector Preview</h3>
+            <div class="bg-gray-50 p-4 rounded-lg overflow-x-auto">
+                <code class="text-sm text-gray-600" data-field="embedding-vector"></code>
+            </div>
+        </div>
 
-        // DOM Elements
-        const elements = {
-            initialLoading: document.getElementById('initial-loading'),
-            errorState: document.getElementById('error-state'),
-            productsGrid: document.getElementById('products-grid'),
-            loadMore: document.getElementById('load-more'),
-            endOfResults: document.getElementById('end-of-results'),
-            template: document.getElementById('product-card-template')
-        };
+        <div class="mt-6 flex justify-end">
+            <a href="#" data-field="view-link" 
+               class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+               target="_blank">
+                View Full Data
+            </a>
+        </div>
+    </div>
+</template>
+{% endblock %}
 
-        // Load products with pagination
-        async function loadProducts(page, append = false) {
-            if (state.loading || (!append && !state.hasMore)) return;
-            
-            state.loading = true;
-            state.currentPage = page;
-
-            // Show appropriate loading state
-            if (!append) {
-                elements.initialLoading.classList.remove('hidden');
-                elements.productsGrid.classList.add('hidden');
-                elements.errorState.classList.add('hidden');
-            } else {
-                elements.loadMore.classList.remove('hidden');
-            }
-
-            try {
-                const response = await fetch(`/admin/embeddings/data?page=${page}&per_page=${state.perPage}`);
-                const data = await response.json();
-
-                if (!response.ok) throw new Error(data.error || 'Failed to load products');
-
-                // Update state
-                state.hasMore = data.pagination.has_next;
-
-                // Render products
-                if (!append) {
-                    elements.productsGrid.innerHTML = '';
-                }
-
-                data.items.forEach(product => {
-                    const card = elements.template.content.cloneNode(true);
-                    
-                    // Set all data fields
-                    card.querySelector('[data-field="id"]').textContent = product.id;
-                    card.querySelector('[data-field="index-status"]').textContent = product.is_indexed ? 'Indexed' : 'Not Indexed';
-                    card.querySelector('[data-field="index-status"]').className = `px-3 py-1 rounded-full text-sm ${product.is_indexed ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`;
-                    
-                    card.querySelector('[data-field="original-name"]').textContent = product.original_data.name;
-                    card.querySelector('[data-field="original-description"]').textContent = product.original_data.description;
-                    card.querySelector('[data-field="original-tags"]').textContent = product.original_data.tags;
-                    
-                    card.querySelector('[data-field="processed-name"]').textContent = product.processed_data.name_clean;
-                    card.querySelector('[data-field="processed-type"]').textContent = product.processed_data.product_type;
-                    card.querySelector('[data-field="processed-description"]').textContent = product.processed_data.description_clean;
-                    card.querySelector('[data-field="processed-tags"]').textContent = product.processed_data.tags_clean;
-                    
-                    card.querySelector('[data-field="embedding-vector"]').textContent = product.embedding_vector;
-                    card.querySelector('[data-field="view-link"]').href = `/admin/embeddings/${product.id}`;
-                    
-                    elements.productsGrid.appendChild(card);
-                });
-
-                // Show/hide appropriate elements
-                elements.initialLoading.classList.add('hidden');
-                elements.productsGrid.classList.remove('hidden');
-                elements.loadMore.classList.add('hidden');
-                
-                if (!state.hasMore) {
-                    elements.endOfResults.classList.remove('hidden');
-                } else {
-                    elements.endOfResults.classList.add('hidden');
-                }
-            } catch (error) {
-                console.error('Error loading products:', error);
-                if (!append) {
-                    elements.errorState.classList.remove('hidden');
-                    elements.initialLoading.classList.add('hidden');
-                    elements.productsGrid.classList.add('hidden');
-                }
-            } finally {
-                state.loading = false;
-            }
+{% block scripts %}
+<script>
+    // State management
+    const state = {
+        currentPage: 1,
+        loading: false,
+        hasMore: true,
+        perPage: 10,
+        filters: {
+            empty_fields: []
         }
+    };
 
-        // Infinite scroll handler
-        function handleScroll() {
-            if (!state.hasMore || state.loading) return;
+    // DOM Elements
+    const elements = {
+        initialLoading: document.getElementById('initial-loading'),
+        errorState: document.getElementById('error-state'),
+        productsGrid: document.getElementById('products-grid'),
+        loadMore: document.getElementById('load-more'),
+        endOfResults: document.getElementById('end-of-results'),
+        noResults: document.getElementById('no-results'),
+        template: document.getElementById('product-card-template'),
+        filterCheckboxes: document.querySelectorAll('.filter-checkbox')
+    };
 
-            const scrolledToBottom = 
-                window.innerHeight + window.scrollY >= 
-                document.documentElement.scrollHeight - 1000; // Load more when 1000px from bottom
+    // Apply filters
+    function applyFilters() {
+        state.filters.empty_fields = Array.from(elements.filterCheckboxes)
+            .filter(checkbox => checkbox.checked)
+            .map(checkbox => checkbox.value);
+        
+        // Reset state and reload
+        state.currentPage = 1;
+        state.hasMore = true;
+        loadProducts(1);
+    }
 
-            if (scrolledToBottom) {
-                loadProducts(state.currentPage + 1, true);
-            }
-        }
-
-        // Initialize
-        document.addEventListener('DOMContentLoaded', () => {
-            loadProducts(1);
-            window.addEventListener('scroll', handleScroll);
+    // Build URL with filters
+    function buildUrl(page) {
+        const url = new URL('/admin/embeddings/data', window.location.origin);
+        url.searchParams.set('page', page);
+        url.searchParams.set('per_page', state.perPage);
+        
+        state.filters.empty_fields.forEach(field => {
+            url.searchParams.append('empty_fields[]', field);
         });
-    </script>
-</body>
-</html> 
+        
+        return url;
+    }
+
+    // Load products with pagination
+    async function loadProducts(page, append = false) {
+        if (state.loading || (!append && !state.hasMore)) return;
+        
+        state.loading = true;
+        state.currentPage = page;
+
+        // Show appropriate loading state
+        if (!append) {
+            elements.initialLoading.classList.remove('hidden');
+            elements.productsGrid.classList.add('hidden');
+            elements.errorState.classList.add('hidden');
+            elements.noResults.classList.add('hidden');
+        } else {
+            elements.loadMore.classList.remove('hidden');
+        }
+
+        try {
+            const response = await fetch(buildUrl(page));
+            const data = await response.json();
+
+            if (!response.ok) throw new Error(data.error || 'Failed to load products');
+
+            // Update state
+            state.hasMore = data.pagination.has_next;
+
+            // Handle no results
+            if (data.items.length === 0 && !append) {
+                elements.noResults.classList.remove('hidden');
+                elements.productsGrid.classList.add('hidden');
+                return;
+            }
+
+            // Render products
+            if (!append) {
+                elements.productsGrid.innerHTML = '';
+            }
+
+            data.items.forEach(product => {
+                const card = elements.template.content.cloneNode(true);
+                
+                // Set all data fields
+                card.querySelector('[data-field="id"]').textContent = product.id;
+                card.querySelector('[data-field="index-status"]').textContent = product.is_indexed ? 'Indexed' : 'Not Indexed';
+                card.querySelector('[data-field="index-status"]').className = `px-3 py-1 rounded-full text-sm ${product.is_indexed ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`;
+                
+                card.querySelector('[data-field="original-name"]').textContent = product.original_data.name;
+                card.querySelector('[data-field="original-description"]').textContent = product.original_data.description;
+                card.querySelector('[data-field="original-tags"]').textContent = product.original_data.tags;
+                
+                card.querySelector('[data-field="processed-name"]').textContent = product.processed_data.name_clean;
+                card.querySelector('[data-field="processed-type"]').textContent = product.processed_data.product_type;
+                card.querySelector('[data-field="processed-description"]').textContent = product.processed_data.description_clean;
+                card.querySelector('[data-field="processed-tags"]').textContent = product.processed_data.tags_clean;
+                
+                card.querySelector('[data-field="embedding-vector"]').textContent = product.embedding_vector;
+                card.querySelector('[data-field="view-link"]').href = `/admin/embeddings/${product.id}`;
+                
+                elements.productsGrid.appendChild(card);
+            });
+
+            // Show/hide appropriate elements
+            elements.initialLoading.classList.add('hidden');
+            elements.productsGrid.classList.remove('hidden');
+            elements.loadMore.classList.add('hidden');
+            
+            if (!state.hasMore) {
+                elements.endOfResults.classList.remove('hidden');
+            } else {
+                elements.endOfResults.classList.add('hidden');
+            }
+        } catch (error) {
+            console.error('Error loading products:', error);
+            if (!append) {
+                elements.errorState.classList.remove('hidden');
+                elements.initialLoading.classList.add('hidden');
+                elements.productsGrid.classList.add('hidden');
+            }
+        } finally {
+            state.loading = false;
+        }
+    }
+
+    // Infinite scroll handler
+    function handleScroll() {
+        if (!state.hasMore || state.loading) return;
+
+        const scrolledToBottom = 
+            window.innerHeight + window.scrollY >= 
+            document.documentElement.scrollHeight - 1000; // Load more when 1000px from bottom
+
+        if (scrolledToBottom) {
+            loadProducts(state.currentPage + 1, true);
+        }
+    }
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', () => {
+        loadProducts(1);
+        window.addEventListener('scroll', handleScroll);
+    });
+</script>
+{% endblock %} 

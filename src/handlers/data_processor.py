@@ -16,7 +16,7 @@ def clean_url_string(text):
 def clean_and_enhance_text(text, is_tags=False):
     """Clean and enhance text for better embedding."""
     text = clean_html(text).strip()
-    print(text)
+
     if is_tags:
         # Convert comma-separated tags to space-separated and repeat important ones
         tags = [t.strip() for t in text.split(",") if t.strip()]

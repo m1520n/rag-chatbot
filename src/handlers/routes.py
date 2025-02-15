@@ -47,6 +47,38 @@ def handle_chat():
     
     return jsonify({'response': response})
 
+@admin.route('/')
+@admin.route('/dashboard')
+def admin_dashboard():
+    """Display admin dashboard."""
+    return render_template('admin/dashboard.html')
+
+@admin.route('/admin/indexing')
+def indexing_page():
+    """Display indexing management page."""
+    return render_template('admin/indexing.html')
+
+@admin.route('/admin/indexing/status')
+def get_indexing_status():
+    """Get current indexing status."""
+    status = product_service.get_indexing_status()
+    return jsonify(status)
+
+@admin.route('/admin/indexing/start', methods=['POST'])
+def start_indexing():
+    """Start the indexing process."""
+    try:
+        product_service.start_indexing()
+        return jsonify({'status': 'started'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@admin.route('/admin/indexing/progress')
+def get_indexing_progress():
+    """Get current indexing progress."""
+    progress = product_service.get_indexing_progress()
+    return jsonify(progress)
+
 @admin.route('/admin/embeddings')
 def list_embeddings():
     """Display embedding preview page."""
@@ -58,16 +90,27 @@ def get_embeddings_data():
     try:
         page = int(request.args.get('page', 1))
         per_page = int(request.args.get('per_page', 10))
+        
+        # Parse filters
+        filters = {}
+        empty_fields = request.args.getlist('empty_fields[]')
+        if empty_fields:
+            filters['empty_fields'] = empty_fields
+            
     except ValueError:
         return jsonify({'error': 'Invalid pagination parameters'}), 400
 
-    preview_data = product_service.preview_product_embedding(page=page, per_page=per_page)
+    preview_data = product_service.preview_product_embedding(
+        page=page, 
+        per_page=per_page,
+        filters=filters
+    )
     return jsonify(preview_data)
 
 @admin.route('/admin/embeddings/<int:product_id>')
 def show_embedding(product_id):
     """Display embedding preview for a specific product."""
-    preview_data = product_service.preview_product_embedding(product_id)
+    preview_data = product_service.preview_single_product_embedding(product_id)
     if not preview_data:
         return jsonify({'error': 'Product not found'}), 404
-    return jsonify(preview_data[0]) 
+    return jsonify(preview_data) 

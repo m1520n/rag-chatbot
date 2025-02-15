@@ -1,0 +1,184 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Product Indexing Management{% endblock %}
+
+{% block content %}
+<div class="flex justify-between items-center mb-8">
+    <h1 class="text-3xl font-bold">Product Indexing Management</h1>
+    <a href="/admin/embeddings" class="text-blue-500 hover:text-blue-600">
+        View Embeddings
+    </a>
+</div>
+
+<!-- Status Card -->
+<div class="bg-white rounded-lg shadow-md p-6 mb-8">
+    <h2 class="text-xl font-semibold mb-4">Indexing Status</h2>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="bg-gray-50 p-4 rounded-lg">
+            <div class="text-gray-600 mb-1">Total Products</div>
+            <div id="total-products" class="text-2xl font-bold">-</div>
+        </div>
+        <div class="bg-gray-50 p-4 rounded-lg">
+            <div class="text-gray-600 mb-1">Indexed Products</div>
+            <div id="indexed-products" class="text-2xl font-bold">-</div>
+        </div>
+        <div class="bg-gray-50 p-4 rounded-lg">
+            <div class="text-gray-600 mb-1">Last Indexed</div>
+            <div id="last-indexed" class="text-2xl font-bold">-</div>
+        </div>
+    </div>
+</div>
+
+<!-- Actions Card -->
+<div class="bg-white rounded-lg shadow-md p-6">
+    <h2 class="text-xl font-semibold mb-4">Indexing Actions</h2>
+    
+    <!-- Index All Products -->
+    <div class="mb-6">
+        <h3 class="text-lg font-medium mb-2">Full Reindex</h3>
+        <p class="text-gray-600 mb-4">
+            This will process and index all active products. This operation might take some time depending on the number of products.
+        </p>
+        <button onclick="startFullReindex()" 
+                id="reindex-btn"
+                class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors">
+            Start Full Reindex
+        </button>
+    </div>
+
+    <!-- Progress Section -->
+    <div id="progress-section" class="hidden">
+        <div class="mb-4">
+            <div class="flex justify-between mb-1">
+                <span class="text-gray-700">Progress</span>
+                <span id="progress-text" class="text-gray-600">0%</span>
+            </div>
+            <div class="w-full bg-gray-200 rounded-full h-2.5">
+                <div id="progress-bar" 
+                     class="bg-blue-500 h-2.5 rounded-full transition-all duration-300" 
+                     style="width: 0%">
+                </div>
+            </div>
+        </div>
+        <div id="current-product" class="text-gray-600 text-sm"></div>
+    </div>
+
+    <!-- Status Messages -->
+    <div id="status-messages" class="mt-4 space-y-2"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Elements
+    const elements = {
+        totalProducts: document.getElementById('total-products'),
+        indexedProducts: document.getElementById('indexed-products'),
+        lastIndexed: document.getElementById('last-indexed'),
+        reindexBtn: document.getElementById('reindex-btn'),
+        progressSection: document.getElementById('progress-section'),
+        progressBar: document.getElementById('progress-bar'),
+        progressText: document.getElementById('progress-text'),
+        currentProduct: document.getElementById('current-product'),
+        statusMessages: document.getElementById('status-messages')
+    };
+
+    // Load initial status
+    async function loadStatus() {
+        try {
+            const response = await fetch('/admin/indexing/status');
+            const data = await response.json();
+            
+            elements.totalProducts.textContent = data.total_products;
+            elements.indexedProducts.textContent = data.indexed_products;
+            elements.lastIndexed.textContent = data.last_indexed || 'Never';
+            
+        } catch (error) {
+            console.error('Error loading status:', error);
+            addStatusMessage('Error loading indexing status', 'error');
+        }
+    }
+
+    // Start full reindex
+    async function startFullReindex() {
+        elements.reindexBtn.disabled = true;
+        elements.progressSection.classList.remove('hidden');
+        elements.progressBar.style.width = '0%';
+        elements.progressText.textContent = '0%';
+        elements.statusMessages.innerHTML = '';
+        
+        try {
+            const response = await fetch('/admin/indexing/start', { method: 'POST' });
+            const data = await response.json();
+            
+            if (response.ok) {
+                addStatusMessage('Indexing started successfully', 'success');
+                pollProgress();
+            } else {
+                throw new Error(data.error || 'Failed to start indexing');
+            }
+        } catch (error) {
+            console.error('Error starting indexing:', error);
+            addStatusMessage('Error starting indexing process', 'error');
+            elements.reindexBtn.disabled = false;
+        }
+    }
+
+    // Poll progress
+    async function pollProgress() {
+        try {
+            const response = await fetch('/admin/indexing/progress');
+            const data = await response.json();
+            
+            updateProgress(data);
+            
+            if (data.status === 'in_progress') {
+                setTimeout(pollProgress, 1000);
+            } else {
+                elements.reindexBtn.disabled = false;
+                loadStatus();
+            }
+        } catch (error) {
+            console.error('Error polling progress:', error);
+            addStatusMessage('Error checking indexing progress', 'error');
+            elements.reindexBtn.disabled = false;
+        }
+    }
+
+    // Update progress UI
+    function updateProgress(data) {
+        const progress = data.progress || 0;
+        elements.progressBar.style.width = `${progress}%`;
+        elements.progressText.textContent = `${progress}%`;
+        
+        if (data.current_product) {
+            elements.currentProduct.textContent = `Processing: ${data.current_product}`;
+        }
+        
+        if (data.status === 'completed') {
+            addStatusMessage('Indexing completed successfully', 'success');
+            elements.currentProduct.textContent = '';
+        } else if (data.status === 'error') {
+            addStatusMessage(data.error || 'An error occurred during indexing', 'error');
+        }
+    }
+
+    // Add status message
+    function addStatusMessage(message, type = 'info') {
+        const colors = {
+            success: 'bg-green-100 text-green-800',
+            error: 'bg-red-100 text-red-800',
+            info: 'bg-blue-100 text-blue-800'
+        };
+        
+        const div = document.createElement('div');
+        div.className = `p-3 rounded ${colors[type]}`;
+        div.textContent = message;
+        
+        elements.statusMessages.prepend(div);
+    }
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', loadStatus);
+</script>
+{% endblock %} 

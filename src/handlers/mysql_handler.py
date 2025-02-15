@@ -59,22 +59,55 @@ class MySQLHandler:
         """
         return self._execute_query(query, (metadata, product_id), fetch=False)
 
-    def count_active_products(self):
-        """Count total number of active products."""
-        query = "SELECT COUNT(*) as count FROM products WHERE active = '1'"
-        result = self._execute_query(query)
+    def count_active_products(self, filters=None):
+        """Count total number of active products with optional filtering."""
+        base_query = "SELECT COUNT(*) as count FROM products WHERE active = '1'"
+        
+        if filters and 'empty_fields' in filters:
+            conditions = []
+            for field in filters['empty_fields']:
+                if field == 'description':
+                    conditions.append("(descr_en IS NULL OR descr_en = '' OR descr2_en IS NULL OR descr2_en = '')")
+                elif field == 'name':
+                    conditions.append("(name_en IS NULL OR name_en = '')")
+                elif field == 'tags':
+                    conditions.append("(tags_en IS NULL OR tags_en = '')")
+            
+            if conditions:
+                base_query += " AND (" + " OR ".join(conditions) + ")"
+
+        result = self._execute_query(base_query)
         return result[0]['count'] if result else 0
 
-    def fetch_active_products_paginated(self, offset, limit):
-        """Fetch active products with pagination."""
-        query = """
+    def fetch_active_products_paginated(self, offset, limit, filters=None):
+        """Fetch active products with pagination and filtering.
+        
+        Args:
+            offset (int): Number of records to skip
+            limit (int): Number of records to return
+            filters (dict): Dictionary of filters, e.g. {'empty_fields': ['description', 'tags']}
+        """
+        base_query = """
             SELECT id, name_en, descr_en, descr2_en, tags_en
             FROM products 
-            WHERE active != 0 OR active != NULL
-            ORDER BY id DESC
-            LIMIT %s OFFSET %s
+            WHERE active = '1'
         """
-        return self._execute_query(query, (limit, offset))
+        
+        if filters and 'empty_fields' in filters:
+            conditions = []
+            for field in filters['empty_fields']:
+                if field == 'description':
+                    conditions.append("(descr_en IS NULL OR descr_en = '' OR descr2_en IS NULL OR descr2_en = '')")
+                elif field == 'name':
+                    conditions.append("(name_en IS NULL OR name_en = '')")
+                elif field == 'tags':
+                    conditions.append("(tags_en IS NULL OR tags_en = '')")
+            
+            if conditions:
+                base_query += " AND (" + " OR ".join(conditions) + ")"
+
+        base_query += " ORDER BY id DESC LIMIT %s OFFSET %s"
+        return self._execute_query(base_query, (limit, offset))
 
 # Create a singleton instance
 mysql_db = MySQLHandler() 

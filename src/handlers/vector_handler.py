@@ -93,4 +93,12 @@ class VectorHandler:
             for i in range(min(5, len(results["ids"]))):  # Show first 5 products
                 print(f"ID: {results['ids'][i]}, Name: {results['metadatas'][i]['name']}")
         except Exception as e:
-            print(f"❌ Error accessing vector database: {str(e)}") 
+            print(f"❌ Error accessing vector database: {str(e)}")
+
+    def count_indexed_products(self):
+        """Count the number of products in the vector database."""
+        try:
+            return len(self.collection.get()['ids'])
+        except Exception as e:
+            print(f"❌ Error counting indexed products: {str(e)}")
+            return 0 
