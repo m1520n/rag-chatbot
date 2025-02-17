@@ -251,8 +251,7 @@ def chat_with_bot(query, conversation_history=[]):
     #    We'll combine all returned results into a single list
     all_product_links = []
     for p in products_mentioned:
-        vector = embeddings.encode_query(p)
-        matched = vector_db.search_products(vector, conversation_history)
+        matched = vector_db.search_products(p, conversation_history)
         logger.info(f"Matched products: {matched}")
         all_product_links.extend(matched)
         logger.info(f"All product links: {all_product_links}")

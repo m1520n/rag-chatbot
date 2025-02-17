@@ -187,15 +187,9 @@ class ProductService:
 
     def search_products(self, query, conversation_history=[]):
         """Search for products using semantic search."""
-        try:
-            # Create embedding for the search query
-            query_vector = self.embeddings.encode_query(query)
-            if query_vector is None:
-                print("❌ Failed to create query embedding")
-                return []
-            
+        try:            
             # Search products using the embedding
-            results = self.vector_db.search_products(query_vector, conversation_history)
+            results = self.vector_db.search_products(query, conversation_history)
             return results
         except Exception as e:
             print(f"❌ Error searching products: {str(e)}")

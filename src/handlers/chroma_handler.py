@@ -1,7 +1,6 @@
 import chromadb
 from src.config.config import Config
-from src.handlers.data_processor import clean_url_string
-
+from src.handlers.embedding_handler import EmbeddingHandler
 class ChromaHandler:
     """Handler for vector database operations using ChromaDB."""
     
@@ -32,13 +31,16 @@ class ChromaHandler:
             print(f"❌ Error adding product to vector database: {str(e)}")
             return None
 
-    def search_products(self, query_vector, conversation_history=[]):
+    def search_products(self, query, conversation_history=[]):
         """Search for products using vector similarity."""
         try:
+            query_vector = EmbeddingHandler().encode_query(query)
             results = self.collection.query(
                 query_embeddings=[query_vector],
                 n_results=Config.SEARCH_RESULTS_LIMIT
             )
+
+            print(f"📝 Search results: {len(results['ids'])}")
 
             if not results["ids"] or not results["ids"][0]:
                 return []
