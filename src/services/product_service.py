@@ -1,6 +1,6 @@
-from handlers.data_processor import clean_and_enhance_text, extract_product_type
+from src.handlers.data_processor import clean_and_enhance_text, extract_product_type
 from src.handlers.mysql_handler import MySQLHandler
-from src.handlers.vector_handler import VectorHandler
+from src.handlers.chroma_handler import ChromaHandler
 from src.handlers.embedding_handler import EmbeddingHandler
 
 class ProductService:
@@ -9,7 +9,7 @@ class ProductService:
     def __init__(self):
         """Initialize service with its dependencies."""
         self.mysql = MySQLHandler()
-        self.vector_db = VectorHandler()
+        self.vector_db = ChromaHandler()
         self.embeddings = EmbeddingHandler()
         self._indexing_status = {
             'status': 'idle',
@@ -168,13 +168,7 @@ class ProductService:
                 product_type
             )
             
-            embedding_data = {
-                'embedding': embedding_result,
-                'name_clean': name_clean,
-                'tags_clean': tags_clean,
-                'product_type': product_type,
-                'description': description_clean
-            } if embedding_result else None
+            embedding_data = embedding_result if embedding_result else None
         else:
             embedding_data = None
         
@@ -193,8 +187,19 @@ class ProductService:
 
     def search_products(self, query, conversation_history=[]):
         """Search for products using semantic search."""
-        query_vector = self.embeddings.encode_query(query)
-        return self.vector_db.search_products(query_vector, conversation_history)
+        try:
+            # Create embedding for the search query
+            query_vector = self.embeddings.encode_query(query)
+            if query_vector is None:
+                print("❌ Failed to create query embedding")
+                return []
+            
+            # Search products using the embedding
+            results = self.vector_db.search_products(query_vector, conversation_history)
+            return results
+        except Exception as e:
+            print(f"❌ Error searching products: {str(e)}")
+            return []
 
     def get_product(self, product_id):
         """Get product details from both MySQL and vector database."""
@@ -290,21 +295,10 @@ class ProductService:
         return self.vector_db.remove_products(product_ids)
 
     def get_embeddings_for_visualization(self):
-        """Get all embeddings with metadata for visualization.
-        
-        Returns:
-            tuple: (embeddings, metadata, ids) where:
-                embeddings: list of embedding vectors
-                metadata: list of metadata dicts
-                ids: list of product ids
-        """
+        """Get all embeddings with metadata for visualization."""
         try:
-            # Get all data from ChromaDB
-            results = self.vector_db.collection.get(
-                include=['embeddings', 'metadatas', 'ids']
-            )
-            
-            if not results['ids']:
+            results = self.vector_db.get_all_embeddings()
+            if not results or not results['ids']:
                 return [], [], []
                 
             return (

@@ -149,4 +149,44 @@ def get_vectors_data():
         'embeddings': embeddings,
         'metadatas': metadatas,
         'ids': ids
-    }) 
+    })
+
+@admin.route('/admin/search')
+def search_page():
+    """Display vector search page."""
+    return render_template('admin/search.html')
+
+@admin.route('/admin/search/query', methods=['POST'])
+def perform_search():
+    """Perform vector search."""
+    try:
+        # Get and validate query
+        data = request.get_json()
+        print(f"📝 Search data: {data}")
+        if not data or 'query' not in data:
+            return jsonify({'error': 'No query provided'}), 400
+            
+        query = data['query']
+        if isinstance(query, list):
+            query = query[0] if query else ""
+        elif not isinstance(query, str):
+            query = str(query)
+            
+        query = query.strip()
+
+        print(f"📝 Search query: {query}")
+        if not query:
+            return jsonify({'error': 'No query provided'}), 400
+
+        # Create embedding for the search query
+
+        # Search products using the embedding
+        results = product_service.search_products(query)
+        print(f"📝 Search results: {results}")
+        if not results:
+            return jsonify({'results': []})
+        
+        return jsonify({'results': results})
+    except Exception as e:
+        print(f"❌ Search error: {str(e)}")
+        return jsonify({'error': str(e)}), 500 

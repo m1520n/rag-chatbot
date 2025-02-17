@@ -1,0 +1,167 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Vector Search{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="flex justify-between items-center mb-8">
+        <h1 class="text-3xl font-bold">Vector Search</h1>
+    </div>
+
+    <!-- Search Form -->
+    <div class="mb-8">
+        <form id="search-form" class="space-y-4">
+            <div>
+                <label for="search-query" class="block text-sm font-medium text-gray-700">Search Query</label>
+                <input type="text" id="search-query" name="query" 
+                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                       placeholder="Enter your search query...">
+            </div>
+            <div>
+                <button type="submit" 
+                        class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                    Search
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Loading State -->
+    <div id="loading-state" class="hidden text-center py-12">
+        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+        <p class="text-gray-600">Searching...</p>
+    </div>
+
+    <!-- Error State -->
+    <div id="error-state" class="hidden text-center py-12">
+        <div class="text-red-500 mb-4">
+            <svg class="w-12 h-12 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            <p>Error performing search. Please try again.</p>
+        </div>
+    </div>
+
+    <!-- Results Grid -->
+    <div id="results-grid" class="grid gap-6 hidden">
+        <!-- Results will be inserted here via JavaScript -->
+    </div>
+
+    <!-- No Results State -->
+    <div id="no-results" class="hidden text-center py-12">
+        <p class="text-gray-600">No products found matching your search.</p>
+    </div>
+</div>
+
+<!-- Result Card Template -->
+<template id="result-card-template">
+    <div class="bg-white rounded-lg shadow-md p-6">
+        <div class="flex justify-between items-start mb-4">
+            <div>
+                <h2 class="text-xl font-semibold mb-1" data-field="name"></h2>
+                <div class="text-sm text-gray-500">
+                    <span class="font-medium">ID:</span> <span data-field="id"></span>
+                    <span class="mx-2">|</span>
+                    <span class="font-medium">Type:</span> <span data-field="type"></span>
+                </div>
+            </div>
+            <div class="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
+                Score: <span data-field="score"></span>
+            </div>
+        </div>
+
+        <div class="space-y-4">
+            <div class="space-y-2">
+                <div>
+                    <h3 class="text-sm font-medium text-gray-700">Description</h3>
+                    <p class="mt-1 text-sm text-gray-600" data-field="description"></p>
+                </div>
+                <div>
+                    <h3 class="text-sm font-medium text-gray-700">Tags</h3>
+                    <p class="mt-1 text-sm text-gray-600" data-field="tags"></p>
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-6 flex justify-end">
+            <a href="#" data-field="view-link" 
+               class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+               target="_blank">
+                View Full Data
+            </a>
+        </div>
+    </div>
+</template>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // DOM Elements
+    const elements = {
+        searchForm: document.getElementById('search-form'),
+        loadingState: document.getElementById('loading-state'),
+        errorState: document.getElementById('error-state'),
+        resultsGrid: document.getElementById('results-grid'),
+        noResults: document.getElementById('no-results'),
+        template: document.getElementById('result-card-template')
+    };
+
+    // Handle search form submission
+    elements.searchForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const query = document.getElementById('search-query').value.trim();
+        if (!query) return;
+
+        // Show loading state
+        elements.loadingState.classList.remove('hidden');
+        elements.resultsGrid.classList.add('hidden');
+        elements.errorState.classList.add('hidden');
+        elements.noResults.classList.add('hidden');
+
+        try {
+            const response = await fetch('/admin/search/query', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ query })
+            });
+
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || 'Search failed');
+
+            // Handle no results
+            if (data.results.length === 0) {
+                elements.noResults.classList.remove('hidden');
+                elements.resultsGrid.classList.add('hidden');
+                return;
+            }
+
+            // Clear and populate results
+            elements.resultsGrid.innerHTML = '';
+            data.results.forEach(result => {
+                console.log(result);
+                const card = elements.template.content.cloneNode(true);
+                
+                card.querySelector('[data-field="id"]').textContent = result?.id || 'N/A';
+                card.querySelector('[data-field="score"]').textContent = result?.score?.toFixed(4) || 'N/A';
+                card.querySelector('[data-field="name"]').textContent = result?.metadata?.name_clean || 'N/A';
+                card.querySelector('[data-field="type"]').textContent = result?.metadata?.product_type || 'N/A';
+                card.querySelector('[data-field="description"]').textContent = result?.metadata?.description_clean || 'N/A';
+                card.querySelector('[data-field="tags"]').textContent = result?.metadata?.tags_clean || 'N/A';
+                card.querySelector('[data-field="view-link"]').href = `/admin/embeddings/${result?.id || 'N/A'}`;
+                
+                elements.resultsGrid.appendChild(card);
+            });
+
+            // Show results
+            elements.resultsGrid.classList.remove('hidden');
+        } catch (error) {
+            console.error('Search error:', error);
+            elements.errorState.classList.remove('hidden');
+        } finally {
+            elements.loadingState.classList.add('hidden');
+        }
+    });
+</script>
+{% endblock %} 

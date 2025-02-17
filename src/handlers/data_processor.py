@@ -15,6 +15,9 @@ def clean_url_string(text):
 
 def clean_and_enhance_text(text, is_tags=False):
     """Clean and enhance text for better embedding."""
+    if not isinstance(text, str):
+        text = str(text)
+    
     text = clean_html(text).strip()
 
     if is_tags:

@@ -30,8 +30,8 @@ class Config:
     # Vector Search Configuration
     VECTOR_WEIGHTS = {
         'NAME': 1.5,        # Increased name weight
-        'DESCRIPTION': 0.8, # Decreased description weight
-        'TAGS': 4.0,       # Significantly increased tags weight
+        'DESCRIPTION': 3.0, # Decreased description weight
+        'TAGS': 2.0,       # Significantly increased tags weight
         'CATEGORY': 2.0    # Added explicit category weight
     }
 

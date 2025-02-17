@@ -3,8 +3,7 @@ import ollama
 import logging
 from datetime import datetime
 from src.config.config import Config
-from src.handlers.db_handler import db
-from src.handlers.embedding_handler import embeddings
+from src.handlers.chroma_handler import vector_db
 import json
 
 #todo add translation from and to english from any language
@@ -253,7 +252,7 @@ def chat_with_bot(query, conversation_history=[]):
     all_product_links = []
     for p in products_mentioned:
         vector = embeddings.encode_query(p)
-        matched = db.search_products(vector, conversation_history)
+        matched = vector_db.search_products(vector, conversation_history)
         logger.info(f"Matched products: {matched}")
         all_product_links.extend(matched)
         logger.info(f"All product links: {all_product_links}")
